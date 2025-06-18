@@ -1,19 +1,13 @@
-
 import React from 'react';
-
-interface TimelineEvent {
-  id: number;
-  date: string;
-  title: string;
-  description: string;
-  type: 'admission' | 'discharge' | 'medication' | 'test' | 'surgery' | 'visit' | 'other';
-}
+import type{ TimelineEvent } from '../../types/schema';
 
 interface PatientTimelineProps {
   events: TimelineEvent[];
 }
 
 export const PatientTimeline: React.FC<PatientTimelineProps> = ({ events }) => {
+  // Fix: Update id type from number to string as per schema
+  
   // Sort events by date (newest first)
   const sortedEvents = [...events].sort((a, b) => 
     new Date(b.date).getTime() - new Date(a.date).getTime()

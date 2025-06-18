@@ -9,15 +9,17 @@ import { BarChart } from '../../components/charts/BarChart';
 import { dataService } from '../../services/dataService';
 // Import at the top of the file
 // Add this import at the top of your Dashboard.tsx file
-import { maskPII, maskPatientId } from '../../utils/privacyUtils';
+import { maskPII, maskPatientId, maskTextContent} from '../../utils/privacyUtils';
+import { formatDateForDisplay } from '../../utils/dateUtils';
 import type { 
   OverviewStatistics, 
   Demographics, 
   AppointmentData,
   RecentActivity,
-  VitalSigns,
   SecurePatient,
-  Department  // Add this type
+  Department,
+  PatientVitalHistory,
+  VitalSignAlert
 } from '../../types/schema';
 
 // Icons using SVGs
@@ -77,12 +79,15 @@ export const Dashboard = () => {
   const [demographics, setDemographics] = useState<Demographics | null>(null);
   const [appointments, setAppointments] = useState<AppointmentData | null>(null);
   const [activities, setActivities] = useState<RecentActivity[]>([]);
-  const [vitalSigns, setVitalSigns] = useState<VitalSigns | null>(null);
   const [recentPatients, setRecentPatients] = useState<SecurePatient[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [showAllDepartments, setShowAllDepartments] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
+  // New state variables for patient vitals and alerts
+  const [patientVitals, setPatientVitals] = useState<PatientVitalHistory[]>([]);
+  const [vitalAlerts, setVitalAlerts] = useState<VitalSignAlert[]>([]);
+
   // Chart configuration states
   const [activeTab, setActiveTab] = useState(0);
 
@@ -94,14 +99,14 @@ export const Dashboard = () => {
       
       try {
         // Fetch all required data in parallel
-        const [overviewData, demographicsData, appointmentsData, activitiesData, vitalsData, patients, departmentsData] = await Promise.all([
+        const [overviewData, demographicsData, appointmentsData, 
+               activitiesData, patients, departmentsData] = await Promise.all([
           dataService.getOverview(),
           dataService.getDemographics(),
           dataService.getAppointments(),
           dataService.getRecentActivities(),
-          dataService.getVitalSigns(),
           dataService.getSecurePatients(),
-          dataService.getDepartments()  // Add this call
+          dataService.getDepartments()
         ]);
 
         // Update state with fetched data
@@ -109,9 +114,16 @@ export const Dashboard = () => {
         setDemographics(demographicsData);
         setAppointments(appointmentsData);
         setActivities(activitiesData);
-        setVitalSigns(vitalsData);
         setRecentPatients(patients.slice(0, 5));
-        setDepartments(departmentsData);  // Store the departments
+        setDepartments(departmentsData);
+        
+        // Fetch patient vitals for a sample patient (P001)
+        const vitalsData = await dataService.getPatientVitals('P001');
+        if (vitalsData) {
+          setPatientVitals(vitalsData.vitals);
+          setVitalAlerts(vitalsData.alerts);
+        }
+        
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
         setError('Failed to load dashboard data. Please try again later.');
@@ -177,10 +189,47 @@ export const Dashboard = () => {
     percentage: item.percentage
   }));
 
+  // Replace the random color generator with a deterministic mapping
+  const getColorForType = (type: string): string => {
+    // Predefined color mapping
+    const colorMap: Record<string, string> = {
+      'Medicare': '#3b82f6', // blue
+      'Medicaid': '#10b981', // green
+      'Private': '#f59e0b', // amber
+      'Self-pay': '#ef4444', // red
+      'Other': '#8b5cf6', // purple
+      // Add mappings for age groups
+      '0-17': '#3b82f6',
+      '18-34': '#10b981',
+      '35-50': '#f59e0b',
+      '51-65': '#ef4444',
+      '65+': '#8b5cf6',
+      // Add mappings for gender
+      'Male': '#3b82f6',
+      'Female': '#f472b6', // pink
+      'OtherGender': '#8b5cf6', // renamed to avoid duplicate key
+      // Default fallback for any other type
+    };
+    
+    // If type exists in the map, return that color
+    if (colorMap[type]) {
+      return colorMap[type];
+    }
+    
+    // Deterministic fallback using hash function
+    let hash = 0;
+    for (let i = 0; i < type.length; i++) {
+      hash = type.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    
+    const hue = hash % 360;
+    return `hsl(${hue}, 70%, 60%)`;
+  };
+
   const insuranceData = demographics.byInsurance?.map(item => ({
     name: item.type || '',
     value: item.count,
-    color: item.color || getRandomColor(item.type || ''),
+    color: item.color || getColorForType(item.type || ''), // Use our new function
     percentage: item.percentage
   })) || [];
 
@@ -270,10 +319,10 @@ export const Dashboard = () => {
         </div>
 
         {/* Demographics Card with Tabs */}
-        <div className="bg-white p-4 rounded-lg shadow-sm">
-          <h2 className="text-lg font-medium text-gray-800 mb-4">Patient Demographics</h2>
+        <div className="bg-white rounded-lg shadow-sm p-4 mb-6">
+          <h2 className="text-lg font-medium text-gray-800 mb-2">Patient Demographics</h2>
           
-          {/* Tabs for different demographic types */}
+          {/* Tabs - Ensure consistent styling */}
           <div className="mb-4 border-b border-gray-200">
             <ul className="flex flex-wrap -mb-px text-sm font-medium text-center">
               {['By Age', 'By Gender', 'By Insurance'].map((tab, index) => (
@@ -282,8 +331,8 @@ export const Dashboard = () => {
                     onClick={() => setActiveTab(index)}
                     className={`inline-block p-3 rounded-t-lg ${
                       activeTab === index 
-                        ? 'text-blue-600 border-b-2 border-blue-600' 
-                        : 'text-gray-500 hover:text-gray-600 hover:border-gray-300 border-b-2 border-transparent'
+                        ? 'text-primary-600 border-b-2 border-primary-600 bg-white' 
+                        : 'text-gray-500 hover:text-gray-600 hover:border-gray-300 bg-white border-b-2 border-transparent'
                     }`}
                   >
                     {tab}
@@ -292,43 +341,15 @@ export const Dashboard = () => {
               ))}
             </ul>
           </div>
-
-          {/* Chart Display based on active tab */}
-          <div className="flex flex-col">
-            <div className="text-sm text-gray-500 mb-4">
-              {activeTab === 0 && 'Distribution of patients by age group'}
-              {activeTab === 1 && 'Distribution of patients by gender'}
-              {activeTab === 2 && 'Distribution of patients by insurance type'}
-              <span className="ml-2 text-xs text-gray-400">(Click on legend items to hide/show)</span>
-            </div>
-
-            {/* Charts based on active tab */}
-            <div className="h-64">
-              {activeTab === 0 && (
-                <PieChart 
-                  data={ageData} 
-                  height={250}
-                  innerRadius={0}
-                  outerRadius={90}
-                />
-              )}
-              {activeTab === 1 && (
-                <PieChart 
-                  data={genderData} 
-                  height={250}
-                  innerRadius={0}
-                  outerRadius={90}
-                />
-              )}
-              {activeTab === 2 && (
-                <PieChart 
-                  data={insuranceData} 
-                  height={250}
-                  innerRadius={0}
-                  outerRadius={90}
-                />
-              )}
-            </div>
+          
+          {/* Chart content */}
+          <div className="text-xs text-gray-500 text-center mb-2">
+            Click on legend items to toggle visibility
+          </div>
+          <div className="h-[280px]">
+            {activeTab === 0 && <PieChart data={ageData} height={260} />}
+            {activeTab === 1 && <PieChart data={genderData} height={260} />}
+            {activeTab === 2 && <PieChart data={insuranceData} height={260} />}
           </div>
         </div>
       </div>
@@ -341,7 +362,7 @@ export const Dashboard = () => {
             <h2 className="text-lg font-medium text-gray-800">Department Performance</h2>
             <button 
               onClick={() => setShowAllDepartments(!showAllDepartments)}
-              className="text-sm text-blue-600 hover:text-blue-800"
+              className="text-sm text-primary-600 hover:text-primary-800 bg-white px-3 py-1 rounded border border-gray-200"
             >
               {showAllDepartments ? 'Show Top 5' : 'Show All'}
             </button>
@@ -383,82 +404,100 @@ export const Dashboard = () => {
         {/* Vital Signs Monitoring */}
         <div className="bg-white p-4 rounded-lg shadow-sm">
           <h2 className="text-lg font-medium text-gray-800 mb-4">Vital Signs Monitoring</h2>
-          {vitalSigns && (
-            <div>
-              <div className="mb-4">
-                <h3 className="text-md font-medium mb-2">Patient P001 - Recent Vital Signs</h3>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
-                        <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Heart Rate</th>
-                        <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">BP</th>
-                        <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Temp</th>
-                        <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">O2 Sat</th>
+          <div>
+            <div className="mb-4">
+              <h3 className="text-md font-medium mb-2">Patient {maskPatientId("P001")} - Recent Vital Signs</h3>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                      <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Heart Rate</th>
+                      <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">BP</th>
+                      <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Temp</th>
+                      <th scope="col" className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">O₂ Sat</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {patientVitals.length > 0 ? patientVitals.slice(-4).map((reading, index) => (
+                      <tr key={index}>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                          {formatDateForDisplay(reading.date)}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
+                          {reading.heartRate}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
+                          {reading.bloodPressure}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
+                          {reading.temperature}°F
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">
+                          {reading.oxygenSaturation}%
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {vitalSigns.patientP001.slice(-4).map((reading, index) => (
-                        <tr key={index}>
-                          <td className="px-3 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{reading.time}</td>
-                          <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{reading.heartRate}</td>
-                          <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{reading.bloodPressure.systolic}/{reading.bloodPressure.diastolic}</td>
-                          <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{reading.temperature}°F</td>
-                          <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{reading.oxygenSat}%</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              <h3 className="text-md font-medium mb-2">Active Alerts</h3>
-              <div className="space-y-2">
-                {vitalSigns.alerts.length > 0 ? 
-                  vitalSigns.alerts.map((alert, index) => (
-                    <div 
-                      key={index} 
-                      className={`flex justify-between p-2 rounded-md ${
-                        alert.severity === 'High' ? 'bg-red-50 text-red-700' : 
-                        alert.severity === 'Medium' ? 'bg-yellow-50 text-yellow-700' : 
-                        'bg-green-50 text-green-700'
-                      }`}
-                    >
-                      <div>
-                        <div className="font-medium">{alert.patientId} - {alert.type}</div>
-                        <div className="text-xs">Value: {alert.value} (Threshold: {alert.threshold})</div>
-                      </div>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        alert.severity === 'High' ? 'bg-red-100 text-red-800' : 
-                        alert.severity === 'Medium' ? 'bg-yellow-100 text-yellow-800' : 
-                        'bg-green-100 text-green-800'
-                      }`}>
-                        {alert.severity}
-                      </span>
-                    </div>
-                  ))
-                  : <div className="text-sm text-gray-500">No active alerts</div>
-                }
+                    )) : (
+                      <tr>
+                        <td colSpan={5} className="px-3 py-2 text-center text-sm text-gray-500">
+                          No data available
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
-          )}
+
+            <h3 className="text-md font-medium mb-2">Active Alerts</h3>
+            <div className="space-y-2">
+              {vitalAlerts.length > 0 ? 
+                vitalAlerts.map((alert, index) => (
+                  <div 
+                    key={alert.id} 
+                    className={`flex justify-between p-2 rounded-md ${
+                      alert.severity === 'High' ? 'bg-red-50 text-red-700' : 
+                      alert.severity === 'Medium' ? 'bg-yellow-50 text-yellow-700' : 
+                      'bg-green-50 text-green-700'
+                    }`}
+                  >
+                    <div>
+                      <div className="font-medium">{maskPatientId(alert.patientId)} - {alert.type}</div>
+                      <div className="text-xs">{alert.message}</div>
+                    </div>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                      alert.severity === 'High' ? 'bg-red-100 text-red-800' : 
+                      alert.severity === 'Medium' ? 'bg-yellow-100 text-yellow-800' : 
+                      'bg-green-100 text-green-800'
+                    }`}>
+                      {alert.severity}
+                    </span>
+                  </div>
+                ))
+                : <div className="text-sm text-gray-500">No active alerts</div>
+              }
+            </div>
+          </div>
         </div>
 
         {/* Recent Activities */}
-        <div className="bg-white p-4 rounded-lg shadow-sm">
+        <div className="bg-white p-4 rounded-lg shadow-sm h-full flex flex-col">
           <h2 className="text-lg font-medium text-gray-800 mb-4">Recent Activities</h2>
-          <div className="overflow-y-auto max-h-[300px]">
+          
+          {/* Make the container take the full available height */}
+          <div className="flex-grow overflow-y-auto min-h-[320px]">
             <ul className="divide-y divide-gray-200">
               {activities.length > 0 ? (
-                activities.map((activity) => (
-                  <li key={activity.id} className="py-3">
+                activities.map((activity, index) => (
+                  <li key={`activity-${activity.id || index}`} className="py-3">
                     <div className="flex items-start">
                       <div className="shrink-0 mr-3">
                         {getActivityIcon(activity.type)}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm text-gray-800">{activity.message}</p>
+                        <p className="text-sm text-gray-800">
+                          {maskTextContent(activity.message)}
+                        </p>
                         <p className="text-xs text-gray-500 mt-1">
                           {formatTimestamp(activity.timestamp)}
                           <StatusBadge
@@ -470,12 +509,14 @@ export const Dashboard = () => {
                   </li>
                 ))
               ) : (
-                <li className="py-8 text-center text-gray-500">
+                <li className="py-12 text-center text-gray-500">
                   No recent activities
                 </li>
               )}
             </ul>
           </div>
+          
+          
         </div>
       </div>
 
@@ -511,7 +552,7 @@ export const Dashboard = () => {
                       ID: {maskPatientId(patient.id)}
                     </div>
                   </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
                       patient.status === 'Critical' 
                         ? 'bg-red-100 text-red-800'

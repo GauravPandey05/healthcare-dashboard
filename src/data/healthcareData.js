@@ -436,24 +436,227 @@ const healthcareData = {
     }
   ],
 
-  // 7. VITAL SIGNS MONITORING
-  vitalSigns: {
-    // Sample patient vital signs over time
-    patientP001: [
-      { time: '06:00', heartRate: 72, bloodPressure: { systolic: 140, diastolic: 90 }, temperature: 98.6, oxygenSat: 98 },
-      { time: '08:00', heartRate: 75, bloodPressure: { systolic: 138, diastolic: 88 }, temperature: 98.4, oxygenSat: 98 },
-      { time: '10:00', heartRate: 78, bloodPressure: { systolic: 142, diastolic: 92 }, temperature: 98.7, oxygenSat: 97 },
-      { time: '12:00', heartRate: 76, bloodPressure: { systolic: 136, diastolic: 86 }, temperature: 98.5, oxygenSat: 98 },
-      { time: '14:00', heartRate: 80, bloodPressure: { systolic: 144, diastolic: 94 }, temperature: 98.8, oxygenSat: 97 },
-      { time: '16:00', heartRate: 77, bloodPressure: { systolic: 139, diastolic: 89 }, temperature: 98.6, oxygenSat: 98 },
-      { time: '18:00', heartRate: 73, bloodPressure: { systolic: 137, diastolic: 87 }, temperature: 98.4, oxygenSat: 98 }
+  // 7. PATIENT VITALS
+  patientVitals: {
+    'P001': [
+      {
+        date: '2024-05-20',
+        heartRate: 76,
+        bloodPressure: '122/80',
+        temperature: 98.6,
+        oxygenSaturation: 97
+      },
+      {
+        date: '2024-05-25',
+        heartRate: 82,
+        bloodPressure: '140/88',
+        temperature: 99.2,
+        oxygenSaturation: 95
+      },
+      {
+        date: '2024-06-01',
+        heartRate: 80,
+        bloodPressure: '138/86',
+        temperature: 99.0,
+        oxygenSaturation: 94
+      },
+      {
+        date: '2024-06-07',
+        heartRate: 78,
+        bloodPressure: '136/84',
+        temperature: 98.8,
+        oxygenSaturation: 95
+      },
+      {
+        date: '2024-06-14',
+        heartRate: 75,
+        bloodPressure: '130/82',
+        temperature: 98.7,
+        oxygenSaturation: 96
+      },
+      {
+        date: '2024-06-21',
+        heartRate: 72,
+        bloodPressure: '125/80',
+        temperature: 98.4,
+        oxygenSaturation: 98
+      }
     ],
-    
-    // Critical alerts for all patients
-    alerts: [
-      { patientId: 'P003', type: 'High Heart Rate', value: 95, threshold: 90, timestamp: '2024-06-12 14:30', severity: 'High' },
-      { patientId: 'P001', type: 'High Blood Pressure', value: '144/94', threshold: '140/90', timestamp: '2024-06-12 14:00', severity: 'Medium' },
-      { patientId: 'P002', type: 'Low Oxygen Saturation', value: 94, threshold: 95, timestamp: '2024-06-12 13:45', severity: 'Medium' }
+    'P002': [
+      {
+        date: '2024-05-15',
+        heartRate: 88,
+        bloodPressure: '145/90',
+        temperature: 99.1,
+        oxygenSaturation: 93
+      },
+      {
+        date: '2024-05-22',
+        heartRate: 90,
+        bloodPressure: '150/92',
+        temperature: 99.4,
+        oxygenSaturation: 92
+      },
+      {
+        date: '2024-05-29',
+        heartRate: 86,
+        bloodPressure: '142/88',
+        temperature: 99.0,
+        oxygenSaturation: 94
+      },
+      {
+        date: '2024-06-05',
+        heartRate: 82,
+        bloodPressure: '138/86',
+        temperature: 98.8,
+        oxygenSaturation: 95
+      },
+      {
+        date: '2024-06-12',
+        heartRate: 78,
+        bloodPressure: '130/84',
+        temperature: 98.6,
+        oxygenSaturation: 96
+      },
+      {
+        date: '2024-06-19',
+        heartRate: 75,
+        bloodPressure: '128/82',
+        temperature: 98.4,
+        oxygenSaturation: 97
+      }
+    ],
+    'P003': [
+      {
+        date: '2024-05-18',
+        heartRate: 62,
+        bloodPressure: '115/75',
+        temperature: 97.8,
+        oxygenSaturation: 98
+      },
+      {
+        date: '2024-05-25',
+        heartRate: 60,
+        bloodPressure: '110/70',
+        temperature: 97.6,
+        oxygenSaturation: 99
+      },
+      {
+        date: '2024-06-01',
+        heartRate: 64,
+        bloodPressure: '118/76',
+        temperature: 98.0,
+        oxygenSaturation: 98
+      },
+      {
+        date: '2024-06-08',
+        heartRate: 66,
+        bloodPressure: '120/78',
+        temperature: 98.2,
+        oxygenSaturation: 97
+      },
+      {
+        date: '2024-06-15',
+        heartRate: 65,
+        bloodPressure: '118/76',
+        temperature: 98.0,
+        oxygenSaturation: 99
+      },
+      {
+        date: '2024-06-22',
+        heartRate: 64,
+        bloodPressure: '116/74',
+        temperature: 97.9,
+        oxygenSaturation: 99
+      }
+    ],
+    'P004': [
+      {
+        date: '2024-05-16',
+        heartRate: 102,
+        bloodPressure: '130/85',
+        temperature: 100.2,
+        oxygenSaturation: 92
+      },
+      {
+        date: '2024-05-18',
+        heartRate: 98,
+        bloodPressure: '128/82',
+        temperature: 99.6,
+        oxygenSaturation: 93
+      },
+      {
+        date: '2024-05-20',
+        heartRate: 94,
+        bloodPressure: '125/80',
+        temperature: 99.2,
+        oxygenSaturation: 94
+      },
+      {
+        date: '2024-05-23',
+        heartRate: 90,
+        bloodPressure: '122/78',
+        temperature: 98.8,
+        oxygenSaturation: 95
+      },
+      {
+        date: '2024-05-26',
+        heartRate: 86,
+        bloodPressure: '120/76',
+        temperature: 98.6,
+        oxygenSaturation: 96
+      },
+      {
+        date: '2024-05-29',
+        heartRate: 82,
+        bloodPressure: '118/74',
+        temperature: 98.4,
+        oxygenSaturation: 97
+      }
+    ],
+    'P005': [
+      {
+        date: '2024-06-01',
+        heartRate: 72,
+        bloodPressure: '118/78',
+        temperature: 98.6,
+        oxygenSaturation: 99
+      },
+      {
+        date: '2024-06-08',
+        heartRate: 74,
+        bloodPressure: '120/80',
+        temperature: 98.7,
+        oxygenSaturation: 98
+      },
+      {
+        date: '2024-06-15',
+        heartRate: 70,
+        bloodPressure: '118/76',
+        temperature: 98.5,
+        oxygenSaturation: 99
+      },
+      {
+        date: '2024-06-22',
+        heartRate: 72,
+        bloodPressure: '122/78',
+        temperature: 98.8,
+        oxygenSaturation: 98
+      },
+      {
+        date: '2024-06-29',
+        heartRate: 75,
+        bloodPressure: '125/80',
+        temperature: 99.0,
+        oxygenSaturation: 97
+      },
+      {
+        date: '2024-07-06',
+        heartRate: 73,
+        bloodPressure: '120/78',
+        temperature: 98.7,
+        oxygenSaturation: 98
+      }
     ]
   },
 
@@ -484,6 +687,12 @@ const healthcareData = {
       { method: 'Cash', amount: 45300, percentage: 6.6 },
       { method: 'Check', amount: 21400, percentage: 3.1 }
     ]
+  },
+  
+  vitalSigns: {
+  // Empty object for backward compatibility
+  patientP001: [],
+  alerts: []
   },
 
   // 9. QUALITY METRICS
@@ -556,7 +765,335 @@ const healthcareData = {
     { id: 3, type: 'Staff Update', message: 'Dr. James Rodriguez is now on call', timestamp: '2024-06-12 14:00', priority: 'Low' },
     { id: 4, type: 'Vital Alert', message: 'Patient P001 - High blood pressure reading', timestamp: '2024-06-12 13:45', priority: 'Medium' },
     { id: 5, type: 'Appointment', message: 'Michael Brown scheduled for follow-up', timestamp: '2024-06-12 13:30', priority: 'Low' }
-  ]
+  ],
+
+  // 12. VITAL SIGNS ALERTS
+  vitalSignsAlerts: [
+    {
+      id: 'ALT001',
+      patientId: 'P001',
+      type: 'Blood Pressure',
+      message: 'Elevated blood pressure reading (140/88) requires monitoring',
+      severity: 'Medium',
+      date: '2024-05-25',
+      resolved: true
+    },
+    {
+      id: 'ALT002',
+      patientId: 'P002',
+      type: 'Blood Pressure',
+      message: 'Hypertension alert: 150/92 exceeds threshold',
+      severity: 'High',
+      date: '2024-05-22',
+      resolved: false
+    },
+    {
+      id: 'ALT003',
+      patientId: 'P002',
+      type: 'Oxygen Saturation',
+      message: 'Oxygen level below 94% - monitor respiratory function',
+      severity: 'Medium',
+      date: '2024-05-15',
+      resolved: true
+    },
+    {
+      id: 'ALT004',
+      patientId: 'P003',
+      type: 'Heart Rate',
+      message: 'Heart rate below normal range (60 BPM)',
+      severity: 'Low',
+      date: '2024-05-25',
+      resolved: true
+    },
+    {
+      id: 'ALT005',
+      patientId: 'P004',
+      type: 'Temperature',
+      message: 'Fever alert: 100.2°F',
+      severity: 'Medium',
+      date: '2024-05-16',
+      resolved: true
+    },
+    {
+      id: 'ALT006',
+      patientId: 'P004',
+      type: 'Heart Rate',
+      message: 'Tachycardia: Heart rate elevated at 102 BPM',
+      severity: 'High',
+      date: '2024-05-16',
+      resolved: true
+    },
+    {
+      id: 'ALT007',
+      patientId: 'P004',
+      type: 'Oxygen Saturation',
+      message: 'Oxygen saturation at 92% - below normal',
+      severity: 'High',
+      date: '2024-05-16',
+      resolved: false
+    },
+    {
+      id: 'ALT008',
+      patientId: 'P005',
+      type: 'Temperature',
+      message: 'Slight temperature elevation (99.0°F)',
+      severity: 'Low',
+      date: '2024-06-29',
+      resolved: true
+    }
+  ],
+
+  // 13. PATIENT TIMELINES
+  patientTimelines: {
+    'P001': [
+      {
+        id: 'TL001-P001',
+        date: '2024-05-15',
+        title: 'Initial Consultation',
+        description: 'Initial evaluation for cardiac symptoms',
+        type: 'visit'
+      },
+      {
+        id: 'TL002-P001',
+        date: '2024-05-20',
+        title: 'Hospital Admission',
+        description: 'Admitted to Cardiology department under Dr. Sarah Johnson',
+        type: 'admission'
+      },
+      {
+        id: 'TL003-P001',
+        date: '2024-05-21',
+        title: 'Diagnostic Testing',
+        description: 'ECG and blood work completed',
+        type: 'test'
+      },
+      {
+        id: 'TL004-P001',
+        date: '2024-05-22',
+        title: 'Medication Prescribed',
+        description: 'Started on Lisinopril and Aspirin',
+        type: 'medication'
+      },
+      {
+        id: 'TL005-P001',
+        date: '2024-06-21',
+        title: 'Follow-up Appointment',
+        description: 'Follow-up with Dr. Sarah Johnson - condition improving',
+        type: 'visit'
+      },
+      {
+        id: 'TL006-P001',
+        date: '2024-07-20',
+        title: 'Scheduled Follow-up',
+        description: 'Next follow-up appointment with Dr. Sarah Johnson',
+        type: 'visit'
+      }
+    ],
+    'P002': [
+      {
+        id: 'TL001-P002',
+        date: '2024-05-10',
+        title: 'Emergency Room Visit',
+        description: 'Presented with severe chest pain and shortness of breath',
+        type: 'visit'
+      },
+      {
+        id: 'TL002-P002',
+        date: '2024-05-10',
+        title: 'Hospital Admission',
+        description: 'Admitted to Critical Care Unit',
+        type: 'admission'
+      },
+      {
+        id: 'TL003-P002',
+        date: '2024-05-11',
+        title: 'Diagnostic Testing',
+        description: 'Coronary angiography performed',
+        type: 'test'
+      },
+      {
+        id: 'TL004-P002',
+        date: '2024-05-12',
+        title: 'Surgical Procedure',
+        description: 'Coronary artery bypass graft surgery',
+        type: 'surgery'
+      },
+      {
+        id: 'TL005-P002',
+        date: '2024-05-15',
+        title: 'Transfer to Standard Care',
+        description: 'Transferred from ICU to regular cardiac care unit',
+        type: 'other'
+      },
+      {
+        id: 'TL006-P002',
+        date: '2024-05-22',
+        title: 'Medication Adjustment',
+        description: 'Blood pressure medication dosage increased',
+        type: 'medication'
+      },
+      {
+        id: 'TL007-P002',
+        date: '2024-06-05',
+        title: 'Physical Therapy',
+        description: 'Started cardiac rehabilitation program',
+        type: 'other'
+      },
+      {
+        id: 'TL008-P002',
+        date: '2024-06-19',
+        title: 'Follow-up Appointment',
+        description: 'Post-surgical follow-up with Dr. Michael Chen',
+        type: 'visit'
+      },
+      {
+        id: 'TL009-P002',
+        date: '2024-07-17',
+        title: 'Scheduled Follow-up',
+        description: 'Next scheduled appointment with Dr. Michael Chen',
+        type: 'visit'
+      }
+    ],
+    'P003': [
+      {
+        id: 'TL001-P003',
+        date: '2024-05-18',
+        title: 'Specialist Consultation',
+        description: 'Initial consultation with Dr. David Wilson for pregnancy',
+        type: 'visit'
+      },
+      {
+        id: 'TL002-P003',
+        date: '2024-05-18',
+        title: 'Ultrasound',
+        description: 'First trimester ultrasound performed',
+        type: 'test'
+      },
+      {
+        id: 'TL003-P003',
+        date: '2024-05-25',
+        title: 'Follow-up Appointment',
+        description: 'Follow-up with Dr. David Wilson - prenatal care',
+        type: 'visit'
+      },
+      {
+        id: 'TL004-P003',
+        date: '2024-06-01',
+        title: 'Blood Work',
+        description: 'Routine prenatal blood tests',
+        type: 'test'
+      },
+      {
+        id: 'TL005-P003',
+        date: '2024-06-15',
+        title: 'Anatomy Scan',
+        description: 'Second trimester detailed ultrasound',
+        type: 'test'
+      },
+      {
+        id: 'TL006-P003',
+        date: '2024-06-22',
+        title: 'Prenatal Check-up',
+        description: 'Regular check-up with Dr. David Wilson',
+        type: 'visit'
+      },
+      {
+        id: 'TL007-P003',
+        date: '2024-07-06',
+        title: 'Scheduled Appointment',
+        description: 'Next prenatal check-up',
+        type: 'visit'
+      }
+    ],
+    'P004': [
+      {
+        id: 'TL001-P004',
+        date: '2024-05-16',
+        title: 'Emergency Room Visit',
+        description: 'Admitted with high fever, cough, and difficulty breathing',
+        type: 'admission'
+      },
+      {
+        id: 'TL002-P004',
+        date: '2024-05-16',
+        title: 'Diagnostic Testing',
+        description: 'Chest X-ray and COVID-19 test performed',
+        type: 'test'
+      },
+      {
+        id: 'TL003-P004',
+        date: '2024-05-17',
+        title: 'Medication Started',
+        description: 'Started on antibiotics and supportive care',
+        type: 'medication'
+      },
+      {
+        id: 'TL004-P004',
+        date: '2024-05-20',
+        title: 'Condition Improvement',
+        description: 'Fever reduced, breathing improved',
+        type: 'other'
+      },
+      {
+        id: 'TL005-P004',
+        date: '2024-05-26',
+        title: 'Discharge',
+        description: 'Discharged with home care instructions',
+        type: 'discharge'
+      },
+      {
+        id: 'TL006-P004',
+        date: '2024-05-29',
+        title: 'Follow-up Appointment',
+        description: 'Post-discharge follow-up with Dr. Emily Rodriguez',
+        type: 'visit'
+      }
+    ],
+    'P005': [
+      {
+        id: 'TL001-P005',
+        date: '2024-06-01',
+        title: 'Annual Physical',
+        description: 'Routine annual check-up',
+        type: 'visit'
+      },
+      {
+        id: 'TL002-P005',
+        date: '2024-06-01',
+        title: 'Blood Work',
+        description: 'Standard blood panel for annual physical',
+        type: 'test'
+      },
+      {
+        id: 'TL003-P005',
+        date: '2024-06-08',
+        title: 'Test Results Review',
+        description: 'Review of physical examination results with Dr. James Taylor',
+        type: 'visit'
+      },
+      {
+        id: 'TL004-P005',
+        date: '2024-06-15',
+        title: 'Nutrition Consultation',
+        description: 'Meeting with nutritionist for diet optimization',
+        type: 'other'
+      },
+      {
+        id: 'TL005-P005',
+        date: '2024-06-29',
+        title: 'Follow-up Appointment',
+        description: 'Follow-up with Dr. James Taylor',
+        type: 'visit'
+      },
+      {
+        id: 'TL006-P005',
+        date: '2024-07-13',
+        title: 'Scheduled Check-up',
+        description: 'Next scheduled wellness check',
+        type: 'visit'
+      }
+    ]
+  }
 };
 
 export default healthcareData;

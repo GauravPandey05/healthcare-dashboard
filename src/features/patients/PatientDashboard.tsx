@@ -3,12 +3,19 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { MetricCard } from '../../components/common/MetricCard';
 import { StatusBadge } from '../../components/common/StatusBadge';
-import { LineChart } from '../../components/charts/LineChart';
-import { BarChart } from '../../components/charts/BarChart';
 import { dataService } from '../../services/dataService';
-import { maskPII, maskPatientId, maskEmail, maskPhoneNumber, conditionallyMaskPII } from '../../utils/privacyUtils';
-import type { SecurePatient, VitalReading, Alert } from '../../types/schema';
+import { maskPII, maskPatientId } from '../../utils/privacyUtils';
+import type { 
+  SecurePatient, 
+  Patient, 
+  TimelineEvent,
+  // Rename the type import to avoid naming conflict with the component
+  PatientVitals as PatientVitalsType
+} from '../../types/schema';
 import { MetricCardSkeleton, ChartSkeleton, TableSkeleton } from '../../components/common/Skeleton';
+// Import the component with its default name
+import PatientVitals from './PatientVitals';
+import { PatientTimeline } from './PatientTimeline';
 
 // Icons
 const UserIcon = () => (
@@ -23,36 +30,34 @@ const HeartIcon = () => (
   </svg>
 );
 
-const CalendarIcon = () => (
+const ThermometerIcon = () => (
   <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-    <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+    <path fillRule="evenodd" d="M10 2a1 1 0 00-1 1v1.323l-1.427 1.19A6 6 0 105.85 13.91l.159.129A1 1 0 007 14.5V16a1 1 0 001 1h4a1 1 0 001-1v-1.5a1 1 0 00-.99-.98l.159-.13a6 6 0 10-1.722-8.578L10 4.323V3a1 1 0 00-1-1z" clipRule="evenodd" />
   </svg>
 );
 
-const MedicationIcon = () => (
+const OxygenIcon = () => (
   <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-    <path fillRule="evenodd" d="M17.064 4.656l-2.05-2.035a3 3 0 00-4.242 0L4.656 8.737a3 3 0 000 4.242l2.05 2.035a3 3 0 004.242 0l6.116-6.116a3 3 0 000-4.242zM9.95 16.95l-2.05-2.035 6.116-6.116 2.05 2.035-6.116 6.116z" clipRule="evenodd" />
+    <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
   </svg>
 );
 
-const ClipboardIcon = () => (
-  <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-    <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z" />
-    <path fillRule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clipRule="evenodd" />
-  </svg>
-);
+// Interface for enhanced patient with original ID
+interface EnhancedSecurePatient extends SecurePatient {
+  originalId: string;
+}
 
 export const PatientDashboard: React.FC = () => {
   const { patientId } = useParams<{ patientId: string }>();
   const navigate = useNavigate();
   
-  const [patients, setPatients] = useState<SecurePatient[]>([]);
-  const [selectedPatient, setSelectedPatient] = useState<SecurePatient | null>(null);
-  const [vitalHistory, setVitalHistory] = useState<VitalReading[]>([]);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [patients, setPatients] = useState<EnhancedSecurePatient[]>([]);
+  const [selectedPatient, setSelectedPatient] = useState<EnhancedSecurePatient | null>(null);
+  // Fix the state type to use the renamed type
+  const [currentVitals, setCurrentVitals] = useState<PatientVitalsType | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [timeRange, setTimeRange] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
 
   useEffect(() => {
     const fetchPatientData = async () => {
@@ -60,35 +65,99 @@ export const PatientDashboard: React.FC = () => {
       setError(null);
 
       try {
-        // Fetch patients list
-        const patientsData = await dataService.getSecurePatients();
-        setPatients(patientsData);
+        // First get all patients with unmasked IDs - but only once
+        const allPatientIds = ["P001", "P002", "P003", "P004", "P005"];
+        const rawPatientsPromises = allPatientIds.map(id => 
+          dataService.getPatientById(id)
+        );
         
-        // If patientId provided, find that patient
-        let patient: SecurePatient | null = null;
+        // Wait for all patient data to be fetched
+        const rawPatients = (await Promise.all(rawPatientsPromises)).filter(p => p !== null) as Patient[];
+        
+        // Fetch secure patient data
+        const securePatientData = await dataService.getSecurePatients();
+        
+        // Create enhanced patients with original IDs
+        const enhancedPatients: EnhancedSecurePatient[] = securePatientData.map(securePatient => {
+          // Find matching raw patient using non-PII fields
+          const rawPatient = rawPatients.find(raw => 
+            raw.age === securePatient.age &&
+            raw.gender === securePatient.gender &&
+            raw.department === securePatient.department &&
+            raw.doctor === securePatient.doctor
+          );
+          
+          return {
+            ...securePatient,
+            originalId: rawPatient ? rawPatient.id : securePatient.id
+          };
+        });
+        
+        setPatients(enhancedPatients);
+        
+        // Find patient by ID (either masked or original)
+        let foundPatient: EnhancedSecurePatient | null = null;
+        
         if (patientId) {
-          patient = await dataService.getSecurePatientById(patientId);
-        } else if (patientsData.length > 0) {
-          // If no patientId, select the first patient
-          patient = patientsData[0];
-          // Update URL without refreshing
-          navigate(`/patients/${patient.id}`, { replace: true });
+          // First try direct match (in case patientId is the masked ID)
+          foundPatient = enhancedPatients.find(p => p.id === patientId) || null;
+          
+          // If not found, try matching with originalId
+          if (!foundPatient) {
+            foundPatient = enhancedPatients.find(p => p.originalId === patientId) || null;
+          }
+          
+          // If still not found but patientId looks like an original ID, try to get the patient directly
+          if (!foundPatient && patientId.match(/^P\d+$/)) {
+            const directPatient = await dataService.getPatientById(patientId);
+            if (directPatient) {
+              // Create secure version for this patient
+              const securePatient = {
+                id: maskPatientId(directPatient.id),
+                fullName: maskPII(directPatient.fullName),
+                age: directPatient.age,
+                gender: directPatient.gender,
+                department: directPatient.department,
+                doctor: directPatient.doctor,
+                status: directPatient.status,
+                severity: directPatient.severity,
+                admissionDate: directPatient.admissionDate,
+                lastVisit: directPatient.lastVisit,
+                nextAppointment: directPatient.nextAppointment,
+                room: directPatient.room,
+                diagnosis: directPatient.diagnosis,
+                vitals: directPatient.vitals,
+                allergies: directPatient.allergies,
+                medications: directPatient.medications,
+                originalId: directPatient.id
+              };
+              foundPatient = securePatient as EnhancedSecurePatient;
+              setPatients([...enhancedPatients, foundPatient]);
+            }
+          }
         }
         
-        if (patient) {
-          setSelectedPatient(patient);
+        // If no patient found, use the first one
+        if (!foundPatient && enhancedPatients.length > 0) {
+          foundPatient = enhancedPatients[0];
+          navigate(`/patients/${foundPatient.originalId}`, { replace: true });
+        }
+        
+        if (foundPatient) {
+          setSelectedPatient(foundPatient);
           
-          // Load patient-specific data
-          const vitalsData = await dataService.getVitalSigns();
-          // Assuming vitals data will be structured by patient ID
-          // For now, we'll use the sample data we have
-          setVitalHistory(vitalsData.patientP001);
+          // Only fetch current vitals from selected patient
+          setCurrentVitals(foundPatient.vitals);
           
-          // Get alerts for this patient
-          const patientAlerts = vitalsData.alerts.filter(alert => 
-            alert.patientId === patient.id
-          );
-          setAlerts(patientAlerts);
+          // Fetch timeline data from service instead of generating it
+          try {
+            const timelineData = await dataService.getPatientTimeline(foundPatient.originalId);
+            setTimelineEvents(timelineData);
+          } catch (timelineErr) {
+            console.error('Error loading timeline data:', timelineErr);
+            // Fallback to empty timeline
+            setTimelineEvents([]);
+          }
           
         } else {
           setError(`Patient with ID ${patientId} not found.`);
@@ -104,44 +173,15 @@ export const PatientDashboard: React.FC = () => {
     fetchPatientData();
   }, [patientId, navigate]);
 
-  // Handle patient change
+  // Handle patient change from dropdown
   const handlePatientChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const pid = e.target.value;
-    navigate(`/patients/${pid}`);
-  };
-
-  // Format vital signs data for charts
-  const formatVitalSignsData = () => {
-    if (!vitalHistory || vitalHistory.length === 0) return [];
+    const selectedPatientId = e.target.value;
+    // Find the patient with this original ID
+    const patient = patients.find(p => p.originalId === selectedPatientId);
     
-    return vitalHistory.map(reading => ({
-      time: reading.time,
-      heartRate: reading.heartRate,
-      systolic: reading.bloodPressure.systolic,
-      diastolic: reading.bloodPressure.diastolic,
-      temperature: reading.temperature,
-      oxygenSat: reading.oxygenSat
-    }));
-  };
-  
-  // Format alert severity for styling
-  const getAlertSeverityClass = (severity: string) => {
-    switch (severity.toLowerCase()) {
-      case 'high':
-        return 'bg-red-100 text-red-800';
-      case 'medium':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'low':
-        return 'bg-green-100 text-green-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
+    if (patient) {
+      navigate(`/patients/${patient.originalId}`);
     }
-  };
-
-  // Format timestamp for display
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp);
-    return date.toLocaleString();
   };
 
   // Loading state with skeleton UI
@@ -209,13 +249,13 @@ export const PatientDashboard: React.FC = () => {
         </div>
         <div className="mt-3 sm:mt-0">
           <select
-            value={selectedPatient.id}
+            value={selectedPatient.originalId}
             onChange={handlePatientChange}
-            className="border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="bg-white text-gray-700 block w-full pl-3 pr-10 py-2 text-base border-gray-200 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md"
           >
             {patients.map(patient => (
-              <option key={patient.id} value={patient.id}>
-                {maskPII(patient.fullName)} ({maskPatientId(patient.id)})
+              <option key={patient.originalId} value={patient.originalId}>
+                {patient.fullName} ({patient.id})
               </option>
             ))}
           </select>
@@ -228,23 +268,23 @@ export const PatientDashboard: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <p className="text-sm text-gray-500">Name</p>
-            <p className="text-md font-medium">{maskPII(selectedPatient.fullName)}</p>
+            <p className="text-md font-medium text-black">{selectedPatient.fullName}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Patient ID</p>
-            <p className="text-md font-medium">{maskPatientId(selectedPatient.id)}</p>
+            <p className="text-md font-medium text-black">{selectedPatient.id}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Age / Gender</p>
-            <p className="text-md font-medium">{selectedPatient.age} / {selectedPatient.gender}</p>
+            <p className="text-md font-medium text-black">{selectedPatient.age} / {selectedPatient.gender}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Department</p>
-            <p className="text-md font-medium">{selectedPatient.department}</p>
+            <p className="text-md font-medium text-black">{selectedPatient.department}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Doctor</p>
-            <p className="text-md font-medium">{selectedPatient.doctor}</p>
+            <p className="text-md font-medium text-black">{selectedPatient.doctor}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Status</p>
@@ -254,11 +294,11 @@ export const PatientDashboard: React.FC = () => {
           </div>
           <div>
             <p className="text-sm text-gray-500">Admission Date</p>
-            <p className="text-md font-medium">{new Date(selectedPatient.admissionDate).toLocaleDateString()}</p>
+            <p className="text-md font-medium text-black">{new Date(selectedPatient.admissionDate).toLocaleDateString()}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Next Appointment</p>
-            <p className="text-md font-medium">
+            <p className="text-md font-medium text-black">
               {selectedPatient.nextAppointment === 'TBD' 
                 ? 'To Be Determined' 
                 : new Date(selectedPatient.nextAppointment).toLocaleDateString()}
@@ -267,123 +307,54 @@ export const PatientDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Key Metrics */}
+      {/* Key Metrics - Use currentVitals from the patient object */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <MetricCard
           title="Heart Rate"
-          value={`${selectedPatient.vitals?.heartRate || '--'} bpm`}
+          value={`${currentVitals?.heartRate || '--'} bpm`}
           icon={<HeartIcon />}
           color={
-            (selectedPatient.vitals?.heartRate || 0) > 100 ? 'danger' : 
-            (selectedPatient.vitals?.heartRate || 0) < 60 ? 'warning' : 'info'
+            (currentVitals?.heartRate || 0) > 100 ? 'danger' : 
+            (currentVitals?.heartRate || 0) < 60 ? 'warning' : 'info'
           }
         />
         <MetricCard
           title="Blood Pressure"
-          value={selectedPatient.vitals?.bloodPressure || '--'}
+          value={currentVitals?.bloodPressure || '--'}
           icon={<UserIcon />}
-          color={selectedPatient.vitals?.bloodPressure.includes('140') ? 'warning' : 'info'}
+          color={(currentVitals?.bloodPressure || '').includes('140') ? 'warning' : 'info'}
         />
         <MetricCard
           title="Temperature"
-          value={`${selectedPatient.vitals?.temperature || '--'}°F`}
-          icon={<UserIcon />}
+          value={`${currentVitals?.temperature || '--'}°F`}
+          icon={<ThermometerIcon />}
           color={
-            (selectedPatient.vitals?.temperature || 0) > 99.5 ? 'danger' : 
-            (selectedPatient.vitals?.temperature || 0) < 97.0 ? 'warning' : 'success'
+            (currentVitals?.temperature || 0) > 99.5 ? 'danger' : 
+            (currentVitals?.temperature || 0) < 97.0 ? 'warning' : 'success'
           }
         />
         <MetricCard
           title="Oxygen Saturation"
-          value={`${selectedPatient.vitals?.oxygenSaturation || '--'}%`}
-          icon={<UserIcon />}
+          value={`${currentVitals?.oxygenSaturation || '--'}%`}
+          icon={<OxygenIcon />}
           color={
-            (selectedPatient.vitals?.oxygenSaturation || 0) < 95 ? 'danger' : 
-            (selectedPatient.vitals?.oxygenSaturation || 0) < 97 ? 'warning' : 'success'
+            (currentVitals?.oxygenSaturation || 0) < 95 ? 'danger' : 
+            (currentVitals?.oxygenSaturation || 0) < 97 ? 'warning' : 'success'
           }
         />
       </div>
 
-      {/* Vital Signs Chart and Alerts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white p-4 rounded-lg shadow-sm">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-medium text-gray-800">Vital Signs Trend</h2>
-            <div className="flex space-x-2">
-              <button
-                onClick={() => setTimeRange('daily')}
-                className={`px-3 py-1 text-sm rounded-md ${
-                  timeRange === 'daily'
-                    ? 'bg-primary-100 text-primary-700'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                Daily
-              </button>
-              <button
-                onClick={() => setTimeRange('weekly')}
-                className={`px-3 py-1 text-sm rounded-md ${
-                  timeRange === 'weekly'
-                    ? 'bg-primary-100 text-primary-700'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                Weekly
-              </button>
-              <button
-                onClick={() => setTimeRange('monthly')}
-                className={`px-3 py-1 text-sm rounded-md ${
-                  timeRange === 'monthly'
-                    ? 'bg-primary-100 text-primary-700'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                Monthly
-              </button>
-            </div>
-          </div>
-          <LineChart
-            data={formatVitalSignsData()}
-            height={300}
-            xAxisKey="time"
-            lines={[
-              { key: 'heartRate', name: 'Heart Rate', color: '#EF4444' },
-              { key: 'systolic', name: 'Systolic', color: '#3B82F6' },
-              { key: 'diastolic', name: 'Diastolic', color: '#10B981' },
-              { key: 'oxygenSat', name: 'Oxygen Sat.', color: '#8B5CF6' }
-            ]}
-          />
-        </div>
-
-        <div className="bg-white p-4 rounded-lg shadow-sm">
-          <h2 className="text-lg font-medium text-gray-800 mb-4">Health Alerts</h2>
-          <div className="overflow-auto max-h-80">
-            {alerts.length > 0 ? (
-              <ul className="space-y-3">
-                {alerts.map((alert, index) => (
-                  <li key={index} className="border-l-4 border-red-500 bg-red-50 p-3 rounded">
-                    <div className="flex items-start">
-                      <div className="flex-1">
-                        <p className="font-semibold text-sm text-gray-800">{alert.type}</p>
-                        <div className="flex items-center mt-1">
-                          <p className="text-xs text-gray-600">Value: {alert.value} (Threshold: {alert.threshold})</p>
-                          <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${getAlertSeverityClass(alert.severity)}`}>
-                            {alert.severity}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">{formatTimestamp(alert.timestamp)}</p>
-                      </div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="text-center py-4">
-                <p className="text-gray-500">No alerts at this time</p>
-              </div>
-            )}
-          </div>
-        </div>
+      {/* Patient Vitals Section - Using the component correctly */}
+      <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
+        <h2 className="text-lg font-medium text-gray-800 mb-4">Patient Vitals</h2>
+        {selectedPatient && !isLoading ? (
+          // This uses the PatientVitals component correctly
+          <PatientVitals patientId={selectedPatient.originalId} />
+        ) : isLoading ? (
+          <ChartSkeleton height="300" />
+        ) : (
+          <div className="text-center text-gray-500 py-4">No vitals data available</div>
+        )}
       </div>
 
       {/* Medications and Diagnosis */}
@@ -444,59 +415,16 @@ export const PatientDashboard: React.FC = () => {
               <p className="text-gray-800">{selectedPatient.room}</p>
             </div>
           </div>
-
-          <div>
-            <p className="text-sm font-medium text-gray-700">Treatment Timeline</p>
-            <div className="mt-2 space-y-4">
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-blue-100 text-blue-600">
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                    </svg>
-                  </div>
-                </div>
-                <div className="ml-4">
-                  <h4 className="text-sm font-medium text-gray-900">Admission</h4>
-                  <p className="mt-1 text-xs text-gray-500">{new Date(selectedPatient.admissionDate).toLocaleDateString()}</p>
-                </div>
-              </div>
-              
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-green-100 text-green-600">
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-                    </svg>
-                  </div>
-                </div>
-                <div className="ml-4">
-                  <h4 className="text-sm font-medium text-gray-900">Last Visit</h4>
-                  <p className="mt-1 text-xs text-gray-500">{new Date(selectedPatient.lastVisit).toLocaleDateString()}</p>
-                </div>
-              </div>
-              
-              <div className="flex">
-                <div className="flex-shrink-0">
-                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-purple-100 text-purple-600">
-                    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                    </svg>
-                  </div>
-                </div>
-                <div className="ml-4">
-                  <h4 className="text-sm font-medium text-gray-900">Next Appointment</h4>
-                  <p className="mt-1 text-xs text-gray-500">
-                    {selectedPatient.nextAppointment === 'TBD' 
-                      ? 'To Be Determined' 
-                      : new Date(selectedPatient.nextAppointment).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
+      </div>
+
+      {/* Patient Timeline - using the real timeline data */}
+      <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
+        <h2 className="text-lg font-medium text-gray-800 mb-4">Patient Timeline</h2>
+        <PatientTimeline events={timelineEvents} />
       </div>
     </PageContainer>
   );
 };
+
+export default PatientDashboard;

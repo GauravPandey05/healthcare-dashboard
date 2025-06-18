@@ -3,13 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { dataService } from '../../services/dataService';
-import { maskPII, maskPatientId } from '../../utils/privacyUtils';
 import type { SecurePatient } from '../../types/schema';
 import { TableSkeleton } from '../../components/common/Skeleton';
 
+// Interface for enhanced patient with original ID
+interface EnhancedPatient extends SecurePatient {
+  originalId: string;
+}
+
 export const PatientsList: React.FC = () => {
   const navigate = useNavigate();
-  const [patients, setPatients] = useState<SecurePatient[]>([]);
+  const [patients, setPatients] = useState<EnhancedPatient[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -19,8 +23,57 @@ export const PatientsList: React.FC = () => {
     const fetchPatients = async () => {
       setIsLoading(true);
       try {
-        const data = await dataService.getSecurePatients();
-        setPatients(data);
+        // Get secure patients for display
+        const secureData = await dataService.getSecurePatients();
+        
+        // Unmask patient IDs - this is the key step
+        const enhancedPatients: EnhancedPatient[] = await Promise.all(
+          secureData.map(async (securePatient) => {
+            // Extract the pattern from the masked ID
+            const maskedId = securePatient.id; // e.g., "P••1"
+            
+            // Extract the first character (P) and last digit (1)
+            const prefix = maskedId.charAt(0);
+            const suffix = maskedId.charAt(maskedId.length - 1);
+            
+            // Try a series of potential original IDs
+            // Most common patterns would be P0001, P0002, etc.
+            let originalId = '';
+            
+            // Potential ID patterns to try
+            const potentialIds = [
+              `${prefix}000${suffix}`,  // P0001
+              `${prefix}00${suffix}`,   // P001
+              `${prefix}0${suffix}`,    // P01
+              `${prefix}${suffix}`      // P1
+            ];
+            
+            // Try each potential ID
+            for (const id of potentialIds) {
+              const patient = await dataService.getPatientById(id);
+              if (patient) {
+                // Check if this patient matches our secure patient
+                // by comparing non-masked fields
+                if (
+                  patient.age === securePatient.age &&
+                  patient.gender === securePatient.gender &&
+                  patient.department === securePatient.department &&
+                  patient.doctor === securePatient.doctor
+                ) {
+                  originalId = patient.id;
+                  break;
+                }
+              }
+            }
+            
+            return {
+              ...securePatient,
+              originalId: originalId || securePatient.id
+            };
+          })
+        );
+        
+        setPatients(enhancedPatients);
       } catch (err) {
         console.error('Error loading patients:', err);
         setError('Failed to load patients. Please try again later.');
@@ -32,8 +85,9 @@ export const PatientsList: React.FC = () => {
     fetchPatients();
   }, []);
   
-  const handlePatientClick = (patientId: string) => {
-    navigate(`/patients/${patientId}`);
+  const handlePatientClick = (patient: EnhancedPatient) => {
+    console.log(`Navigating to patient: ${patient.originalId} (was: ${patient.id})`);
+    navigate(`/patients/${patient.originalId}`);
   };
   
   // Filter patients based on search term and status filter
@@ -82,7 +136,7 @@ export const PatientsList: React.FC = () => {
         <p className="text-gray-500">View and manage patient records</p>
       </div>
       
-      {/* Search and Filter */}
+      {/* Search and Filter with white background styling */}
       <div className="mb-6 flex flex-col md:flex-row gap-4">
         <div className="flex-1">
           <div className="relative rounded-md shadow-sm">
@@ -93,7 +147,7 @@ export const PatientsList: React.FC = () => {
             </div>
             <input
               type="text"
-              className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md"
+              className="bg-white focus:ring-primary-500 focus:border-primary-500 block w-full pl-10 sm:text-sm border-gray-200 rounded-md"
               placeholder="Search patients by name, ID, department or doctor"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -102,7 +156,7 @@ export const PatientsList: React.FC = () => {
         </div>
         <div className="flex-shrink-0">
           <select
-            className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+            className="bg-white text-gray-700 block w-full pl-3 pr-10 py-2 text-base border-gray-200 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-md"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -147,7 +201,7 @@ export const PatientsList: React.FC = () => {
                   <tr 
                     key={patient.id} 
                     className="hover:bg-gray-50 cursor-pointer"
-                    onClick={() => handlePatientClick(patient.id)}
+                    onClick={() => handlePatientClick(patient)}
                   >
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
@@ -157,8 +211,8 @@ export const PatientsList: React.FC = () => {
                           </svg>
                         </div>
                         <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">{maskPII(patient.fullName)}</div>
-                          <div className="text-sm text-gray-500">ID: {maskPatientId(patient.id)}</div>
+                          <div className="text-sm font-medium text-gray-900">{patient.fullName}</div>
+                          <div className="text-sm text-gray-500">ID: {patient.id}</div>
                         </div>
                       </div>
                     </td>
@@ -196,5 +250,4 @@ export const PatientsList: React.FC = () => {
   );
 };
 
-// Add a default export that points to the PatientsList component
 export default PatientsList;

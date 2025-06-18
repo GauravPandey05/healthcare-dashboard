@@ -1,173 +1,229 @@
 // First, we need to ensure we're importing from the right path
 import healthcareData from '../data/healthcareData';
-import { maskPII, maskPatientId } from '../utils/privacyUtils';
-
-import type {
+import { maskPII, maskPatientId, maskEmail, maskPhoneNumber } from '../utils/privacyUtils';
+import type { 
+  AppointmentData, 
+  Department, 
   OverviewStatistics,
-  Demographics,
-  AppointmentData,
-  Department,
   Patient,
   StaffMember,
-  RecentActivity,
+  Demographics,
   Financial,
   Quality,
   Inventory,
+  RecentActivity,
   VitalSigns,
-  PatientStatus,
-  PatientSeverity,
-  PatientVitals,
+  Appointment,
   SecurePatient,
-  SecureStaffMember
+  SecureStaffMember,
+  // Add these new imports
+  PatientVitalHistory,
+  VitalSignAlert,
+  TimelineEvent,
+  GetPatientVitalsResponse,
+  PatientStatus,
+  PatientSeverity
 } from '../types/schema';
 
-// Helper function to create a secure patient object that hides PII
-const createSecurePatient = (patient: Patient): SecurePatient => {
-  // Extract only non-PII fields
-  return {
-    id: patient.id,
-    fullName: patient.fullName,// Only show first initial for privacy
-    age: patient.age,
-    gender: patient.gender,
-    department: patient.department,
-    doctor: patient.doctor,
-    status: patient.status,
-    severity: patient.severity,
-    admissionDate: patient.admissionDate,
-    lastVisit: patient.lastVisit,
-    nextAppointment: patient.nextAppointment,
-    room: patient.room,
-    diagnosis: patient.diagnosis,
-    vitals: patient.vitals,
-    allergies: patient.allergies,
-    medications: patient.medications
-  };
-};
 
-// Helper function to create a secure staff object that hides PII
-const createSecureStaff = (staff: StaffMember): SecureStaffMember => {
-  return {
-    id: staff.id,
-    fullName: staff.fullName,
-    role: staff.role,
-    department: staff.department,
-    status: staff.status,
-    shift: staff.shift,
-    specialty: staff.specialty,
-    experience: staff.experience,
-    patients: staff.patients,
-    rating: staff.rating
-    // Omit PII like phone and email
-  };
-};
 
-// The data service that provides methods to access the healthcare data
-export const dataService = {
+class DataService {
   // Get overview statistics
-  getOverview: (): Promise<OverviewStatistics> => {
-    return Promise.resolve(healthcareData.overview);
-  },
+  async getOverview(): Promise<OverviewStatistics> {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    return healthcareData.overview;
+  }
 
   // Get demographic data
-  getDemographics: (): Promise<Demographics> => {
-    return Promise.resolve(healthcareData.demographics);
-  },
+  async getDemographics(): Promise<Demographics> {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    return healthcareData.demographics;
+  }
 
   // Get appointment data
-  getAppointments: (): Promise<AppointmentData> => {
-    return Promise.resolve(healthcareData.appointments);
-  },
+  async getAppointments(): Promise<AppointmentData> {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    return healthcareData.appointments;
+  }
 
   // Get departments
-  getDepartments: (): Promise<Department[]> => {
-    return Promise.resolve(healthcareData.departments);
-  },
+  async getDepartments(): Promise<Department[]> {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    return healthcareData.departments;
+  }
 
   // Get a specific department by ID
-  getDepartmentById: (id: number): Promise<Department | null> => {
+  async getDepartmentById(id: number): Promise<Department | null> {
+    await new Promise(resolve => setTimeout(resolve, 800));
     const department = healthcareData.departments.find(dept => dept.id === id);
-    return Promise.resolve(department || null);
-  },
+    return department || null;
+  }
 
   // Get secure patient list (no PII)
-  getSecurePatients: (): Promise<SecurePatient[]> => {
-    const securePatients = healthcareData.patients.map(patient => 
-      createSecurePatient(patient as Patient)
-    );
-    return Promise.resolve(securePatients);
-  },
+  async getSecurePatients(): Promise<SecurePatient[]> {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    const securePatients = healthcareData.patients.map(patient => {
+      return {
+        id: maskPatientId(patient.id),
+        fullName: maskPII(patient.fullName),
+        age: patient.age,
+        gender: patient.gender,
+        department: patient.department,
+        doctor: patient.doctor,
+        status: patient.status as PatientStatus, // Fix #1: Cast to PatientStatus
+        severity: patient.severity as PatientSeverity, // Fix #1: Cast to PatientSeverity
+        admissionDate: patient.admissionDate,
+        lastVisit: patient.lastVisit,
+        nextAppointment: patient.nextAppointment,
+        room: patient.room,
+        diagnosis: patient.diagnosis,
+        vitals: patient.vitals,
+        allergies: patient.allergies,
+        medications: patient.medications
+      };
+    });
+    return securePatients;
+  }
+
+  // Get a patient by ID (full data with PII)
+  async getPatientById(id: string): Promise<Patient | null> {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    const patient = healthcareData.patients.find(p => p.id === id);
+    return patient as Patient || null;
+  }
 
   // Get a secure patient by ID (no PII)
-  getSecurePatientById: (id: string): Promise<SecurePatient | null> => {
+  async getSecurePatientById(id: string): Promise<SecurePatient | null> {
+    await new Promise(resolve => setTimeout(resolve, 800));
     const patient = healthcareData.patients.find(p => p.id === id);
-    return Promise.resolve(patient ? createSecurePatient(patient as Patient) : null);
-  },
+    if (!patient) return null;
+    
+    return {
+      id: maskPatientId(patient.id),
+      fullName: maskPII(patient.fullName),
+      age: patient.age,
+      gender: patient.gender,
+      department: patient.department,
+      doctor: patient.doctor,
+      status: patient.status as PatientStatus, // Fix: Cast to PatientStatus
+      severity: patient.severity as PatientSeverity, // Fix: Cast to PatientSeverity
+      admissionDate: patient.admissionDate,
+      lastVisit: patient.lastVisit,
+      nextAppointment: patient.nextAppointment,
+      room: patient.room,
+      diagnosis: patient.diagnosis,
+      vitals: patient.vitals,
+      allergies: patient.allergies,
+      medications: patient.medications
+    };
+  }
 
   // Get patients by department ID (no PII)
-  getSecurePatientsByDepartment: (departmentId: number): Promise<SecurePatient[]> => {
+  async getSecurePatientsByDepartment(departmentId: number): Promise<SecurePatient[]> {
+    await new Promise(resolve => setTimeout(resolve, 800));
     const department = healthcareData.departments.find(dept => dept.id === departmentId);
-    if (!department) return Promise.resolve([]);
+    if (!department) return [];
 
     const departmentPatients = healthcareData.patients.filter(
       patient => patient.department === department.name
     );
     
-    return Promise.resolve(
-      departmentPatients.map(patient => createSecurePatient(patient as Patient))
-    );
-  },
+    return departmentPatients.map(patient => ({
+      id: maskPatientId(patient.id),
+      fullName: maskPII(patient.fullName),
+      age: patient.age,
+      gender: patient.gender,
+      department: patient.department,
+      doctor: patient.doctor,
+      status: patient.status as PatientStatus, // Fix: Cast to PatientStatus
+      severity: patient.severity as PatientSeverity, // Fix: Cast to PatientSeverity
+      admissionDate: patient.admissionDate,
+      lastVisit: patient.lastVisit,
+      nextAppointment: patient.nextAppointment,
+      room: patient.room,
+      diagnosis: patient.diagnosis,
+      vitals: patient.vitals,
+      allergies: patient.allergies,
+      medications: patient.medications
+    }));
+  }
 
-  // Get staff list (no PII)
-  // Removed duplicate getSecureStaff to avoid property conflict.
+  // Get secure staff list (no PII)
+  async getSecureStaff(): Promise<SecureStaffMember[]> {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    const secureStaff = healthcareData.staff.map(staff => ({
+      id: staff.id,
+      fullName: maskPII(staff.fullName),
+      role: staff.role,
+      department: staff.department,
+      status: staff.status,
+      shift: staff.shift,
+      specialty: staff.specialty,
+      experience: staff.experience,
+      patients: staff.patients,
+      rating: staff.rating
+    }));
+    return secureStaff;
+  }
 
   // Get staff by department (no PII)
-  getSecureStaffByDepartment: (departmentId: number): Promise<SecureStaffMember[]> => {
+  async getSecureStaffByDepartment(departmentId: number): Promise<SecureStaffMember[]> {
+    await new Promise(resolve => setTimeout(resolve, 800));
     const department = healthcareData.departments.find(dept => dept.id === departmentId);
-    if (!department) return Promise.resolve([]);
+    if (!department) return [];
 
     const departmentStaff = healthcareData.staff.filter(
       staff => staff.department === department.name
     );
     
-    return Promise.resolve(
-      departmentStaff.map(staff => createSecureStaff(staff as StaffMember))
-    );
-  },
+    return departmentStaff.map(staff => ({
+      id: staff.id,
+      fullName: maskPII(staff.fullName),
+      role: staff.role,
+      department: staff.department,
+      status: staff.status,
+      shift: staff.shift,
+      specialty: staff.specialty,
+      experience: staff.experience,
+      patients: staff.patients,
+      rating: staff.rating
+    }));
+  }
 
   // Get recent activities
-  getRecentActivities: (): Promise<RecentActivity[]> => {
-    return Promise.resolve(healthcareData.recentActivities);
-  },
+  async getRecentActivities(): Promise<RecentActivity[]> {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    return healthcareData.recentActivities;
+  }
 
   // Get financial data
-  getFinancialData: (): Promise<Financial> => {
-    return Promise.resolve(healthcareData.financial);
-  },
+  async getFinancialData(): Promise<Financial> {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    return healthcareData.financial;
+  }
 
   // Get quality metrics
-  getQualityMetrics: (): Promise<Quality> => {
-    return Promise.resolve(healthcareData.quality);
-  },
+  async getQualityMetrics(): Promise<Quality> {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    return healthcareData.quality;
+  }
 
   // Get inventory data
-  getInventory: (): Promise<Inventory> => {
-    return Promise.resolve(healthcareData.inventory);
-  },
+  async getInventory(): Promise<Inventory> {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    return healthcareData.inventory;
+  }
 
   // Get vital signs
-  getVitalSigns: (): Promise<VitalSigns> => {
-    return Promise.resolve(healthcareData.vitalSigns);
-  },
+  async getVitalSigns(): Promise<VitalSigns> {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    return healthcareData.vitalSigns;
+  }
 
-  // Get overview statistics (alternative method name to avoid conflict)
-  getOverviewStats: (): Promise<any> => {
-    // Return the overview statistics
-    return Promise.resolve(healthcareData.overview);
-  },
-
-  // Get demographics with mapped structure (alternative method name to avoid conflict)
-  getDemographicsMapped: (): Promise<any> => {
-    return Promise.resolve({
+  // Get demographics with mapped structure for charts
+  async getDemographicsMapped(): Promise<any> {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    return {
       age: healthcareData.demographics.byAge.map(item => ({
         name: item.label || item.ageGroup,
         value: item.count,
@@ -186,28 +242,128 @@ export const dataService = {
         percentage: item.percentage,
         color: item.color
       }))
-    });
-  },
-
-  // Add these methods to your dataService class
-  async getSecureStaff(): Promise<SecureStaffMember[]> {
-    // In a real implementation, this would apply security filters based on user role
-    return healthcareData.staff.map(staffMember => ({
-      id: staffMember.id,
-      fullName: staffMember.fullName,
-      role: staffMember.role,
-      department: staffMember.department,
-      status: staffMember.status,
-      shift: staffMember.shift,
-      specialty: staffMember.specialty,
-      experience: staffMember.experience,
-      patients: staffMember.patients,
-      rating: staffMember.rating
-    }));
-  },
-
-  async getSecureStaffById(id: string): Promise<SecureStaffMember | null> {
-    const staffMembers = await this.getSecureStaff();
-    return staffMembers.find(staff => staff.id === id) || null;
+    };
   }
-};
+
+  // New method to get individual appointments based on healthcareData
+  async getAllAppointments(): Promise<Appointment[]> {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    const appointments: Appointment[] = [];
+    const patients = healthcareData.patients;
+    
+    // Create appointments based on patient data in healthcareData
+    patients.forEach(patient => {
+      // Create appointment based on lastVisit if it exists
+      if (patient.lastVisit) {
+        appointments.push({
+          id: `APT-${patient.id}-LV`,
+          patientId: patient.id,
+          patientName: patient.fullName,
+          date: patient.lastVisit,
+          time: "09:00 AM",
+          department: patient.department,
+          doctor: patient.doctor,
+          type: "Check-up",
+          status: "Completed",
+          duration: 30,
+          notes: `Regular check-up for ${patient.diagnosis}`
+        });
+      }
+      
+      // Create appointment based on nextAppointment if it exists
+      if (patient.nextAppointment) {
+        appointments.push({
+          id: `APT-${patient.id}-NA`,
+          patientId: patient.id,
+          patientName: patient.fullName,
+          date: patient.nextAppointment,
+          time: "10:30 AM",
+          department: patient.department,
+          doctor: patient.doctor,
+          type: "Follow-up",
+          status: "Scheduled",
+          duration: 45,
+          notes: `Follow-up for ${patient.diagnosis}`
+        });
+      }
+    });
+    
+    return appointments;
+  }
+  
+  // Get appointments for a specific day
+  async getAppointmentsForDay(date: string): Promise<Appointment[]> {
+    const allAppointments = await this.getAllAppointments();
+    return allAppointments.filter(apt => apt.date === date);
+  }
+  
+  // Get appointments for a specific patient
+  async getPatientAppointments(patientId: string): Promise<Appointment[]> {
+    const allAppointments = await this.getAllAppointments();
+    return allAppointments.filter(apt => apt.patientId === patientId);
+  }
+  
+  // Create a new appointment
+  async createAppointment(appointmentData: Partial<Appointment>): Promise<Appointment> {
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    // Generate a deterministic ID based on patient and timestamp
+    const timestamp = Date.now();
+    const id = `APT-${appointmentData.patientId}-${timestamp.toString().substring(timestamp.toString().length - 6)}`;
+    
+    const newAppointment = {
+      id,
+      ...appointmentData,
+    } as Appointment;
+    
+    return newAppointment;
+  }
+  
+  // Update appointment status
+  async updateAppointmentStatus(id: string, status: string): Promise<{ success: boolean, message: string }> {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    return { 
+      success: true, 
+      message: `Appointment ${id} status updated to ${status}` 
+    };
+  }
+  
+  // Get patient vitals history
+  async getPatientVitals(patientId: string): Promise<GetPatientVitalsResponse | null> {
+    await new Promise(resolve => setTimeout(resolve, 600));
+    
+    const patient = await this.getPatientById(patientId);
+    
+    if (!patient) {
+      return null;
+    }
+    
+    // Fix #2: Use type assertion for accessing patientVitals
+    const vitalsHistory = (healthcareData.patientVitals as Record<string, PatientVitalHistory[]>)[patientId] || [];
+    
+    // Fix #3: Cast VitalSignAlert severity
+    const patientAlerts = (healthcareData.vitalSignsAlerts?.filter(
+      alert => alert.patientId === patientId
+    ) || []).map(alert => ({
+      ...alert,
+      severity: alert.severity as PatientSeverity // Fix: Cast to PatientSeverity
+    }));
+    
+    return {
+      vitals: vitalsHistory,
+      currentReading: patient.vitals,
+      alerts: patientAlerts
+    };
+  }
+
+  // New method to get patient timeline
+  async getPatientTimeline(patientId: string): Promise<TimelineEvent[]> {
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Fix #4: Use type assertion for accessing patientTimelines
+    return (healthcareData.patientTimelines as Record<string, TimelineEvent[]>)[patientId] || [];
+  }
+}
+
+export const dataService = new DataService();

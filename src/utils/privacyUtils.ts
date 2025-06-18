@@ -25,13 +25,23 @@ export function maskPII(fullName: string): string {
  * Masks a patient ID by showing only last 4 characters
  */
 export function maskPatientId(patientId: string | number): string {
+  if (!patientId) return '';
+  
   const id = String(patientId);
-  if (id.length <= 4) return id;
   
-  const lastFour = id.slice(-4);
-  const masked = '•'.repeat(id.length - 4);
+  // Keep the prefix letter and ensure uniqueness by preserving the last character
+  if (/^[A-Z]\d+$/.test(id)) {
+    const prefix = id.charAt(0);
+    const numericPart = id.substring(1);
+    const lastChar = numericPart.slice(-1);
+    
+    // Always keep last digit to ensure uniqueness
+    return `${prefix}${'•'.repeat(Math.max(0, numericPart.length - 1))}${lastChar}`;
+  }
   
-  return `${masked}${lastFour}`;
+  // For other formats, keep first and last character
+  if (id.length <= 2) return id;
+  return `${id.charAt(0)}${'•'.repeat(id.length - 2)}${id.slice(-1)}`;
 }
 
 /**
@@ -81,4 +91,17 @@ export function conditionallyMaskPII(value: string, maskFunction: (value: string
     return value;
   }
   return maskFunction(value);
+}
+
+// Add this utility function
+export function maskTextContent(text: string): string {
+  if (!text) return '';
+  
+  // Mask patient IDs (format: P followed by digits)
+  text = text.replace(/\b(P\d{3,})\b/g, (match) => maskPatientId(match));
+  
+  // Mask potential names (format: First Last) - look for capitalized words
+  text = text.replace(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b/g, (match) => maskPII(match));
+  
+  return text;
 }

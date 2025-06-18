@@ -92,6 +92,7 @@ export interface Department {
 export type PatientStatus = 'In Treatment' | 'Scheduled' | 'Critical' | 'Discharged';
 export type PatientSeverity = 'High' | 'Medium' | 'Low';
 
+// Definition for current vitals as stored in patient records
 export interface PatientVitals {
   bloodPressure: string;
   heartRate: number;
@@ -101,6 +102,36 @@ export interface PatientVitals {
   height: number;
 }
 
+// Definition for historical vitals from patientVitals collection
+export interface PatientVitalHistory {
+  date: string;
+  heartRate: number;
+  bloodPressure: string;
+  temperature: number;
+  oxygenSaturation: number;
+}
+
+// Vital sign alerts definition
+export interface VitalSignAlert {
+  id: string;
+  patientId: string;
+  type: string;
+  message: string;
+  severity: PatientSeverity;
+  date: string;
+  resolved: boolean;
+}
+
+// Timeline event definition
+export interface TimelineEvent {
+  id: string;
+  date: string;
+  title: string;
+  description: string;
+  type: 'admission' | 'visit' | 'test' | 'medication' | 'discharge' | 'surgery' | 'other';
+}
+
+// Patient interface
 export interface Patient {
   id: string;
   firstName: string;
@@ -146,6 +177,7 @@ export interface StaffMember {
   rating: number;
 }
 
+// Legacy vital reading format - kept for backward compatibility
 export interface VitalReading {
   time: string;
   heartRate: number;
@@ -157,6 +189,7 @@ export interface VitalReading {
   oxygenSat: number;
 }
 
+// Legacy alert format - kept for backward compatibility
 export interface Alert {
   patientId: string;
   type: string;
@@ -166,9 +199,15 @@ export interface Alert {
   severity: string;
 }
 
+/**
+ * @deprecated This interface exists for backward compatibility.
+ * Use PatientVitalHistory and VitalSignAlert instead.
+ */
 export interface VitalSigns {
-  patientP001: VitalReading[];
-  alerts: Alert[];
+  // This structure is kept for backward compatibility
+  // but actual data now uses patientVitals and vitalSignsAlerts
+  patientP001?: VitalReading[];
+  alerts?: Alert[];
 }
 
 export interface FinancialMonthly {
@@ -249,18 +288,11 @@ export interface RecentActivity {
   priority: string;
 }
 
-export interface HealthcareData {
-  overview: OverviewStatistics;
-  demographics: Demographics;
-  appointments: AppointmentData;
-  departments: Department[];
-  patients: Patient[];
-  staff: StaffMember[];
-  vitalSigns: VitalSigns;
-  financial: Financial;
-  quality: Quality;
-  inventory: Inventory;
-  recentActivities: RecentActivity[];
+// Response type for getPatientVitals method
+export interface GetPatientVitalsResponse {
+  vitals: PatientVitalHistory[];
+  currentReading: PatientVitals;
+  alerts: VitalSignAlert[];
 }
 
 export interface SecurePatient {
@@ -293,4 +325,39 @@ export interface SecureStaffMember {
   experience: number;
   patients: number;
   rating: number;
+}
+
+// Appointment interface
+export interface Appointment {
+  id: string;
+  patientId: string;
+  patientName: string;
+  date: string;
+  time: string;
+  department: string;
+  doctor: string;
+  type: string;
+  status: string;
+  duration: number;
+  notes?: string;
+}
+
+// Complete HealthcareData interface with proper properties
+export interface HealthcareData {
+  overview: OverviewStatistics;
+  demographics: Demographics;
+  appointments: AppointmentData;
+  departments: Department[];
+  patients: Patient[];
+  staff: StaffMember[];
+  vitalSigns: VitalSigns; // Kept for backward compatibility
+  financial: Financial;
+  quality: Quality;
+  inventory: Inventory;
+  recentActivities: RecentActivity[];
+  
+  // New data structures that are actually used
+  patientVitals: Record<string, PatientVitalHistory[]>;
+  vitalSignsAlerts: VitalSignAlert[];
+  patientTimelines: Record<string, TimelineEvent[]>;
 }

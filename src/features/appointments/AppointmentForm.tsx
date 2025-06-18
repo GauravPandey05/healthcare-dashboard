@@ -1,349 +1,334 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { PageContainer } from '../../components/layout/PageContainer';
+import { useNavigate } from 'react-router-dom';
 import { dataService } from '../../services/dataService';
-import { maskPII } from '../../utils/privacyUtils';
-import type { SecureStaffMember, SecurePatient, AppointmentData } from '../../types/schema';
-import { TableSkeleton } from '../../components/common/Skeleton';
-
-interface FormData {
-  patientId: string;
-  doctorId: string;
-  department: string;
-  date: string;
-  time: string;
-  type: string;
-  notes: string;
-}
+import { formatDateForInput } from '../../utils/dateUtils';
+import type { SecurePatient, SecureStaffMember, Appointment } from '../../types/schema';
 
 const AppointmentForm: React.FC = () => {
-  const { appointmentId } = useParams<{ appointmentId: string }>();
   const navigate = useNavigate();
-  const isEditing = !!appointmentId;
-  
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [patients, setPatients] = useState<SecurePatient[]>([]);
   const [doctors, setDoctors] = useState<SecureStaffMember[]>([]);
-  const [appointmentTypes, setAppointmentTypes] = useState<string[]>([]);
-  const [formData, setFormData] = useState<FormData>({
+  const [error, setError] = useState<string | null>(null);
+  
+  const [formData, setFormData] = useState({
     patientId: '',
     doctorId: '',
-    department: '',
-    date: new Date().toISOString().split('T')[0],
+    date: formatDateForInput(new Date().toISOString()),
     time: '09:00',
     type: 'Check-up',
-    notes: ''
+    notes: '',
+    duration: 30
   });
   
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchFormData = async () => {
       setIsLoading(true);
       try {
-        // Fetch all required data
-        const [patientsData, staffData, appointmentsData] = await Promise.all([
-          dataService.getSecurePatients(),
-          dataService.getSecureStaff(),
-          dataService.getAppointments()
-        ]);
-        
-        // Set patients data
+        // Get secure patients data (no PII)
+        const patientsData = await dataService.getSecurePatients();
         setPatients(patientsData);
         
-        // Filter staff to only include doctors
-        const doctorsOnly = staffData.filter(staff => 
-          staff.role.includes('Doctor') || 
-          staff.role.includes('Surgeon') || 
-          staff.role.includes('Specialist')
-        );
-        setDoctors(doctorsOnly);
+        // Get doctors (secure staff filtered by role)
+        const staffData = await dataService.getSecureStaff();
+        setDoctors(staffData.filter(staff => staff.role === 'Doctor'));
         
-        // Set appointment types
-        setAppointmentTypes(appointmentsData.byType.map(type => type.type));
-        
-        // If editing an existing appointment, fetch its data
-        if (isEditing && appointmentId) {
-          // In a real app, this would fetch the appointment data from an API
-          // For now, we'll simulate with mock data
-          const mockAppointment = {
-            patientId: patientsData[0]?.id || '',
-            doctorId: doctorsOnly[0]?.id || '',
-            department: doctorsOnly[0]?.department || '',
-            date: new Date().toISOString().split('T')[0],
-            time: '10:00',
-            type: appointmentsData.byType[0].type,
-            notes: 'Follow-up appointment'
-          };
-          
-          setFormData(mockAppointment);
-        }
-      } catch (err) {
-        console.error('Error loading data:', err);
-        setError('Failed to load necessary data. Please try again later.');
+      } catch (err: any) {
+        console.error('Error fetching form data:', err);
+        setError(err.message || 'Failed to load form data. Please try again later.');
       } finally {
         setIsLoading(false);
       }
     };
     
-    fetchData();
-  }, [appointmentId, isEditing]);
+    fetchFormData();
+  }, []);
   
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     
-    if (name === 'doctorId') {
-      // When doctor changes, update department automatically
-      const selectedDoctor = doctors.find(doc => doc.id === value);
-      setFormData({
-        ...formData,
-        doctorId: value,
-        department: selectedDoctor?.department || formData.department
-      });
-    } else if (name === 'patientId') {
-      // When patient changes, could potentially pre-fill related data
-      const selectedPatient = patients.find(patient => patient.id === value);
-      setFormData({
-        ...formData,
-        patientId: value
-      });
+    // Handle number inputs specifically
+    if (name === 'duration') {
+      setFormData(prev => ({
+        ...prev,
+        [name]: parseInt(value, 10) || 30
+      }));
     } else {
-      setFormData({
-        ...formData,
+      setFormData(prev => ({
+        ...prev,
         [name]: value
-      });
+      }));
     }
   };
   
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitting(true);
+    setError(null);
     
-    // Validate form
-    if (!formData.patientId || !formData.doctorId || !formData.date || !formData.time || !formData.type) {
-      alert('Please fill in all required fields');
-      return;
+    try {
+      // Get selected patient and doctor for additional data
+      const selectedPatient = patients.find(p => p.id === formData.patientId);
+      const selectedDoctor = doctors.find(d => d.id === formData.doctorId);
+      
+      if (!selectedPatient || !selectedDoctor) {
+        throw new Error('Please select both patient and doctor');
+      }
+      
+      // Format time correctly (ensure AM/PM)
+      const formattedTime = formatTimeForUI(formData.time);
+      
+      // Create appointment data
+      const appointmentData = {
+        ...formData,
+        time: formattedTime,
+        patientName: selectedPatient.fullName,
+        doctor: selectedDoctor.fullName,
+        department: selectedDoctor.department,
+        status: 'Scheduled',
+      };
+      
+      // Submit to service
+      const result = await dataService.createAppointment(appointmentData);
+      
+      // Navigate back to appointments list
+      navigate('/appointments');
+    } catch (err: any) {
+      console.error('Error creating appointment:', err);
+      setError(err.message || 'Failed to create appointment. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
-    
-    // In a real app, this would make an API call to save the appointment
-    console.log('Submitting appointment data:', formData);
-    
-    // Show success message
-    alert(`Appointment successfully ${isEditing ? 'updated' : 'created'}!`);
-    
-    // Navigate back to appointments list
-    navigate('/appointments/list');
   };
   
-  if (isLoading) {
+  // Helper function to ensure time is properly formatted
+  const formatTimeForUI = (time: string): string => {
+    if (!time) return '9:00 AM';
+    
+    // If already has AM/PM, return as is
+    if (time.includes('AM') || time.includes('PM')) return time;
+    
+    // Convert 24-hour time to AM/PM format
+    const [hours, minutes] = time.split(':').map(part => parseInt(part, 10));
+    
+    if (isNaN(hours) || isNaN(minutes)) return '9:00 AM';
+    
+    if (hours < 12) {
+      return `${hours}:${minutes.toString().padStart(2, '0')} AM`;
+    } else if (hours === 12) {
+      return `12:${minutes.toString().padStart(2, '0')} PM`;
+    } else {
+      return `${hours - 12}:${minutes.toString().padStart(2, '0')} PM`;
+    }
+  };
+  
+  // Show loading spinner only on initial load, not during submission
+  if (isLoading && (!patients.length || !doctors.length)) {
     return (
-      <PageContainer>
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">
-            {isEditing ? 'Edit Appointment' : 'New Appointment'}
-          </h1>
-          <p className="text-gray-500">
-            {isEditing ? 'Update appointment details' : 'Schedule a new appointment'}
-          </p>
-        </div>
-        <div className="bg-white shadow rounded-lg">
-          <div className="animate-pulse p-6">
-            <div className="h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
-            <div className="h-10 bg-gray-200 rounded w-full mb-6"></div>
-            <div className="h-8 bg-gray-200 rounded w-1/4 mb-4"></div>
-            <div className="h-10 bg-gray-200 rounded w-full mb-6"></div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="h-10 bg-gray-200 rounded"></div>
-              <div className="h-10 bg-gray-200 rounded"></div>
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500"></div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="bg-white shadow-md rounded-lg p-6">
+      <h2 className="text-xl font-semibold text-gray-800 mb-6">New Appointment</h2>
+      
+      {error && (
+        <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-6">
+          <div className="flex">
+            <div className="ml-3">
+              <p className="text-sm text-red-700">{error}</p>
             </div>
           </div>
         </div>
-      </PageContainer>
-    );
-  }
-  
-  if (error) {
-    return (
-      <PageContainer>
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative" role="alert">
-          <strong className="font-bold">Error: </strong>
-          <span className="block sm:inline">{error}</span>
-        </div>
-      </PageContainer>
-    );
-  }
-
-  return (
-    <PageContainer>
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800">
-            {isEditing ? 'Edit Appointment' : 'New Appointment'}
-          </h1>
-          <p className="text-gray-500">
-            {isEditing ? 'Update appointment details' : 'Schedule a new appointment'}
-          </p>
-        </div>
-        <button
-          onClick={() => navigate('/appointments/list')}
-          className="text-gray-600 hover:text-gray-800 flex items-center"
-        >
-          <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path>
-          </svg>
-          Back to List
-        </button>
-      </div>
+      )}
       
-      <div className="bg-white shadow rounded-lg overflow-hidden">
-        <form onSubmit={handleSubmit} className="p-6">
-          <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
-            {/* Patient Selection */}
-            <div className="sm:col-span-3">
-              <label htmlFor="patientId" className="block text-sm font-medium text-gray-700 mb-1">
-                Patient <span className="text-red-500">*</span>
-              </label>
-              <select
-                id="patientId"
-                name="patientId"
-                className="shadow-sm focus:ring-primary-500 focus:border-primary-500 block w-full sm:text-sm border-gray-300 rounded-md text-black"
-                value={formData.patientId}
-                onChange={handleInputChange}
-                required
-              >
-                <option value="">Select a patient</option>
-                {patients.map(patient => (
-                  <option key={patient.id} value={patient.id}>
-                    {maskPII(patient.fullName)} ({patient.id})
-                  </option>
-                ))}
-              </select>
-            </div>
-            
-            {/* Doctor Selection */}
-            <div className="sm:col-span-3">
-              <label htmlFor="doctorId" className="block text-sm font-medium text-gray-700 mb-1">
-                Doctor <span className="text-red-500">*</span>
-              </label>
-              <select
-                id="doctorId"
-                name="doctorId"
-                className="shadow-sm focus:ring-primary-500 focus:border-primary-500 block w-full sm:text-sm border-gray-300 rounded-md text-black"
-                value={formData.doctorId}
-                onChange={handleInputChange}
-                required
-              >
-                <option value="">Select a doctor</option>
-                {doctors.map(doctor => (
-                  <option key={doctor.id} value={doctor.id}>
-                    {maskPII(doctor.fullName)} - {doctor.role}
-                  </option>
-                ))}
-              </select>
-            </div>
-            
-            {/* Department - Auto-filled based on doctor selection */}
-            <div className="sm:col-span-3">
-              <label htmlFor="department" className="block text-sm font-medium text-gray-700 mb-1">
-                Department
-              </label>
-              <input
-                type="text"
-                name="department"
-                id="department"
-                className="shadow-sm focus:ring-primary-500 focus:border-primary-500 block w-full sm:text-sm border-gray-300 rounded-md text-black bg-gray-50"
-                value={formData.department}
-                readOnly
-              />
-            </div>
-            
-            {/* Appointment Type */}
-            <div className="sm:col-span-3">
-              <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-1">
-                Appointment Type <span className="text-red-500">*</span>
-              </label>
-              <select
-                id="type"
-                name="type"
-                className="shadow-sm focus:ring-primary-500 focus:border-primary-500 block w-full sm:text-sm border-gray-300 rounded-md text-black"
-                value={formData.type}
-                onChange={handleInputChange}
-                required
-              >
-                <option value="">Select appointment type</option>
-                {appointmentTypes.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-            </div>
-            
-            {/* Date */}
-            <div className="sm:col-span-3">
-              <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-1">
-                Date <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="date"
-                name="date"
-                id="date"
-                className="shadow-sm focus:ring-primary-500 focus:border-primary-500 block w-full sm:text-sm border-gray-300 rounded-md text-black"
-                value={formData.date}
-                onChange={handleInputChange}
-                min={new Date().toISOString().split('T')[0]}
-                required
-              />
-            </div>
-            
-            {/* Time */}
-            <div className="sm:col-span-3">
-              <label htmlFor="time" className="block text-sm font-medium text-gray-700 mb-1">
-                Time <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="time"
-                name="time"
-                id="time"
-                className="shadow-sm focus:ring-primary-500 focus:border-primary-500 block w-full sm:text-sm border-gray-300 rounded-md text-black"
-                value={formData.time}
-                onChange={handleInputChange}
-                required
-                step="900" // 15-minute intervals
-              />
-            </div>
-            
-            {/* Notes */}
-            <div className="sm:col-span-6">
-              <label htmlFor="notes" className="block text-sm font-medium text-gray-700 mb-1">
-                Notes
-              </label>
-              <textarea
-                id="notes"
-                name="notes"
-                rows={4}
-                className="shadow-sm focus:ring-primary-500 focus:border-primary-500 block w-full sm:text-sm border-gray-300 rounded-md text-black"
-                value={formData.notes}
-                onChange={handleInputChange}
-                placeholder="Additional information about the appointment"
-              />
-            </div>
+      <form onSubmit={handleSubmit}>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          {/* Patient Selection */}
+          <div>
+            <label 
+              htmlFor="patientId" 
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Patient
+            </label>
+            <select
+              id="patientId"
+              name="patientId"
+              value={formData.patientId}
+              onChange={handleInputChange}
+              className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              required
+              disabled={submitting}
+            >
+              <option value="">Select Patient</option>
+              {patients.map(patient => (
+                <option key={patient.id} value={patient.id}>
+                  {patient.fullName}
+                </option>
+              ))}
+            </select>
           </div>
           
-          <div className="pt-6 flex justify-end space-x-3">
-            <button
-              type="button"
-              className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-              onClick={() => navigate('/appointments/list')}
+          {/* Doctor Selection */}
+          <div>
+            <label 
+              htmlFor="doctorId" 
+              className="block text-sm font-medium text-gray-700 mb-1"
             >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="bg-primary-600 py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+              Doctor
+            </label>
+            <select
+              id="doctorId"
+              name="doctorId"
+              value={formData.doctorId}
+              onChange={handleInputChange}
+              className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              required
+              disabled={submitting}
             >
-              {isEditing ? 'Update Appointment' : 'Create Appointment'}
-            </button>
+              <option value="">Select Doctor</option>
+              {doctors.map(doctor => (
+                <option key={doctor.id} value={doctor.id}>
+                  {doctor.fullName} - {doctor.department}
+                </option>
+              ))}
+            </select>
           </div>
-        </form>
-      </div>
-    </PageContainer>
+          
+          {/* Date Selection */}
+          <div>
+            <label 
+              htmlFor="date" 
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Date
+            </label>
+            <input
+              type="date"
+              id="date"
+              name="date"
+              value={formData.date}
+              onChange={handleInputChange}
+              className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              required
+              disabled={submitting}
+            />
+          </div>
+          
+          {/* Time Selection */}
+          <div>
+            <label 
+              htmlFor="time" 
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Time
+            </label>
+            <input
+              type="time"
+              id="time"
+              name="time"
+              value={formData.time}
+              onChange={handleInputChange}
+              className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              required
+              disabled={submitting}
+            />
+          </div>
+          
+          {/* Appointment Type */}
+          <div>
+            <label 
+              htmlFor="type" 
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Appointment Type
+            </label>
+            <select
+              id="type"
+              name="type"
+              value={formData.type}
+              onChange={handleInputChange}
+              className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              required
+              disabled={submitting}
+            >
+              <option value="Check-up">Check-up</option>
+              <option value="Follow-up">Follow-up</option>
+              <option value="Consultation">Consultation</option>
+              <option value="Procedure">Procedure</option>
+              <option value="Emergency">Emergency</option>
+              <option value="Vaccination">Vaccination</option>
+              <option value="Lab Work">Lab Work</option>
+            </select>
+          </div>
+          
+          {/* Duration */}
+          <div>
+            <label 
+              htmlFor="duration" 
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Duration (minutes)
+            </label>
+            <input
+              type="number"
+              id="duration"
+              name="duration"
+              value={formData.duration}
+              onChange={handleInputChange}
+              min="15"
+              step="15"
+              className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+              required
+              disabled={submitting}
+            />
+          </div>
+        </div>
+        
+        {/* Notes */}
+        <div className="mb-6">
+          <label 
+            htmlFor="notes" 
+            className="block text-sm font-medium text-gray-700 mb-1"
+          >
+            Notes
+          </label>
+          <textarea
+            id="notes"
+            name="notes"
+            value={formData.notes}
+            onChange={handleInputChange}
+            rows={4}
+            className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+            disabled={submitting}
+          />
+        </div>
+        
+        {/* Form Actions */}
+        <div className="flex justify-end space-x-3">
+          <button
+            type="button"
+            onClick={() => navigate('/appointments')}
+            className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50"
+            disabled={submitting}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50"
+          >
+            {submitting ? 'Creating...' : 'Create Appointment'}
+          </button>
+        </div>
+      </form>
+    </div>
   );
 };
 

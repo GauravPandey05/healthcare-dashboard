@@ -44,7 +44,18 @@ export const BarChart: React.FC<BarChartProps> = ({
         }}
       >
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey={xAxisKey} />
+        <XAxis 
+          dataKey={xAxisKey} 
+          angle={-45} 
+          textAnchor="end" 
+          height={60} 
+          tick={{
+            fontSize: 12,
+            fontWeight: 'bold'  // This makes the text bold
+          }}
+          tickMargin={10}
+        />
+
         <YAxis yAxisId="left" />
         {showYAxisRight && <YAxis yAxisId="right" orientation="right" />}
         <Tooltip />
