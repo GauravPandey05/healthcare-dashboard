@@ -160,6 +160,8 @@ export interface Patient {
   notes: string;
 }
 
+export type StaffStatus = 'On Duty' | 'Off Duty' | 'On Call' | 'On Leave';
+
 export interface StaffMember {
   id: string;
   firstName: string;
@@ -167,7 +169,7 @@ export interface StaffMember {
   fullName: string;
   role: string;
   department: string;
-  status: string;
+  status: StaffStatus;
   shift: string;
   experience: number;
   patients: number;
@@ -314,12 +316,18 @@ export interface SecurePatient {
   medications: string[];
 }
 
+export interface StaffScheduleEntry {
+  staffId: string;
+  date: string;
+  shift: string;
+}
+
 export interface SecureStaffMember {
   id: string;
   fullName: string;
   role: string;
   department: string;
-  status: string;
+  status: StaffStatus;
   shift: string;
   specialty: string;
   experience: number;
@@ -360,4 +368,27 @@ export interface HealthcareData {
   patientVitals: Record<string, PatientVitalHistory[]>;
   vitalSignsAlerts: VitalSignAlert[];
   patientTimelines: Record<string, TimelineEvent[]>;
+}
+
+// Add this new interface for enhanced department data
+export interface EnhancedDepartment {
+  department: Department;
+  financial: {
+    revenue: number;
+    percentage: number;
+  } | null;
+  quality: {
+    satisfaction: {
+      score: number;
+      responses: number;
+    } | null;
+    waitTime: {
+      avgWait: number;
+      target: number;
+    } | null;
+    readmission: {
+      rate: number;
+      target: number;
+    } | null;
+  };
 }

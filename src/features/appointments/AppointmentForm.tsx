@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { dataService } from '../../services/dataService';
-import { formatDateForInput } from '../../utils/dateUtils';
+import { formatDateForInput, formatTimeForDisplay } from '../../utils/dateUtils';
 import type { SecurePatient, SecureStaffMember, Appointment } from '../../types/schema';
 
 const AppointmentForm: React.FC = () => {
@@ -64,62 +64,40 @@ const AppointmentForm: React.FC = () => {
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!formData.patientId || !formData.doctorId || !formData.date || !formData.time) {
+      setError('Please fill all required fields');
+      return;
+    }
+    
     setSubmitting(true);
     setError(null);
     
     try {
-      // Get selected patient and doctor for additional data
       const selectedPatient = patients.find(p => p.id === formData.patientId);
       const selectedDoctor = doctors.find(d => d.id === formData.doctorId);
       
       if (!selectedPatient || !selectedDoctor) {
-        throw new Error('Please select both patient and doctor');
+        throw new Error('Selected patient or doctor not found');
       }
       
-      // Format time correctly (ensure AM/PM)
-      const formattedTime = formatTimeForUI(formData.time);
-      
-      // Create appointment data
       const appointmentData = {
         ...formData,
-        time: formattedTime,
         patientName: selectedPatient.fullName,
         doctor: selectedDoctor.fullName,
         department: selectedDoctor.department,
         status: 'Scheduled',
+        time: formatTimeForDisplay(formData.time)
       };
       
-      // Submit to service
-      const result = await dataService.createAppointment(appointmentData);
-      
-      // Navigate back to appointments list
+      await dataService.createAppointment(appointmentData);
       navigate('/appointments');
+      
     } catch (err: any) {
       console.error('Error creating appointment:', err);
       setError(err.message || 'Failed to create appointment. Please try again.');
     } finally {
       setSubmitting(false);
-    }
-  };
-  
-  // Helper function to ensure time is properly formatted
-  const formatTimeForUI = (time: string): string => {
-    if (!time) return '9:00 AM';
-    
-    // If already has AM/PM, return as is
-    if (time.includes('AM') || time.includes('PM')) return time;
-    
-    // Convert 24-hour time to AM/PM format
-    const [hours, minutes] = time.split(':').map(part => parseInt(part, 10));
-    
-    if (isNaN(hours) || isNaN(minutes)) return '9:00 AM';
-    
-    if (hours < 12) {
-      return `${hours}:${minutes.toString().padStart(2, '0')} AM`;
-    } else if (hours === 12) {
-      return `12:${minutes.toString().padStart(2, '0')} PM`;
-    } else {
-      return `${hours - 12}:${minutes.toString().padStart(2, '0')} PM`;
     }
   };
   

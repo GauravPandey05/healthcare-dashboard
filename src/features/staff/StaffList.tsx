@@ -4,16 +4,19 @@ import { PageContainer } from '../../components/layout/PageContainer';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import type { StatusType } from '../../components/common/StatusBadge';
 import { dataService } from '../../services/dataService';
-import { maskPII } from '../../utils/privacyUtils';
-import type { SecureStaffMember } from '../../types/schema';
+import { maskPII,maskStaffId } from '../../utils/privacyUtils';
+import type { SecureStaffMember, StaffStatus } from '../../types/schema';
 import { TableSkeleton } from '../../components/common/Skeleton';
 
 // Function to map staff status to StatusType
-const mapStatusToStatusType = (status: string): StatusType => {
-  if (status === 'On Duty') return 'Active';
-  if (status === 'On Call') return 'Pending';
-  if (status === 'Off Duty') return 'Inactive';
-  return 'Active'; // Default fallback
+const mapStatusToStatusType = (status: StaffStatus): StatusType => {
+  switch(status) {
+    case 'On Duty': return 'Active';
+    case 'On Call': return 'Pending';
+    case 'Off Duty': return 'Inactive';
+    case 'On Leave': return 'Inactive';
+    default: return 'Active';
+  }
 };
 
 const StaffList: React.FC = () => {
@@ -24,6 +27,7 @@ const StaffList: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<'All' | StaffStatus>('All');
 
   useEffect(() => {
     const fetchStaff = async () => {
@@ -53,17 +57,23 @@ const StaffList: React.FC = () => {
   const roles = Array.from(new Set(staff.map(member => member.role)));
 
   // Filter staff based on search term and filters
-  const filteredStaff = staff.filter(member => {
-    const matchesSearch = 
-      member.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      member.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      member.department.toLowerCase().includes(searchTerm.toLowerCase());
+  let filtered = [...staff];
+  if (searchTerm) {
+    filtered = filtered.filter(member => {
+      const matchesSearch = 
+        member.fullName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        member.role.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        member.department.toLowerCase().includes(searchTerm.toLowerCase());
+        
+      const matchesDepartment = departmentFilter === 'all' || member.department === departmentFilter;
+      const matchesRole = roleFilter === 'all' || member.role === roleFilter;
       
-    const matchesDepartment = departmentFilter === 'all' || member.department === departmentFilter;
-    const matchesRole = roleFilter === 'all' || member.role === roleFilter;
-    
-    return matchesSearch && matchesDepartment && matchesRole;
-  });
+      return matchesSearch && matchesDepartment && matchesRole;
+    });
+  }
+  if (statusFilter !== 'All') {
+    filtered = filtered.filter(member => member.status === statusFilter);
+  }
 
   if (isLoading) {
     return (
@@ -133,6 +143,19 @@ const StaffList: React.FC = () => {
             <option key={index} value={role}>{role}</option>
           ))}
         </select>
+
+        {/* Status Filter - New Addition */}
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as 'All' | StaffStatus)}
+          className="form-select rounded-md border-gray-300 text-sm focus:border-blue-500 focus:ring-blue-500"
+        >
+          <option value="All">All Statuses</option>
+          <option value="On Duty">On Duty</option>
+          <option value="On Call">On Call</option>
+          <option value="Off Duty">Off Duty</option>
+          <option value="On Leave">On Leave</option>
+        </select>
       </div>
 
       {/* Staff Table */}
@@ -165,8 +188,8 @@ const StaffList: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredStaff.length > 0 ? (
-                filteredStaff.map((member) => (
+              {filtered.length > 0 ? (
+                filtered.map((member) => (
                   <tr 
                     key={member.id} 
                     className="hover:bg-gray-50 cursor-pointer"
@@ -187,7 +210,7 @@ const StaffList: React.FC = () => {
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">{maskPII(member.fullName)}</div>
-                          <div className="text-sm text-gray-500">ID: {member.id}</div>
+                          <div className="text-sm text-gray-500">ID: {maskStaffId(member.id)}</div>
                         </div>
                       </div>
                     </td>

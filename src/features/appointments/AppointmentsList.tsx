@@ -6,7 +6,7 @@ import { StatusBadge } from '../../components/common/StatusBadge';
 import { mapAppointmentStatusToStatusType } from '../../utils/statusUtils';
 import { formatDateForDisplay, formatTimeForDisplay } from '../../utils/dateUtils';
 import type { Appointment } from '../../types/schema';
-
+import { maskPII,maskPatientId } from '../../utils/privacyUtils';
 const AppointmentsList = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
@@ -169,8 +169,8 @@ const AppointmentsList = () => {
                 sortedAppointments.map((appointment) => (
                   <tr key={appointment.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="font-medium text-gray-900">{appointment.patientName}</div>
-                      <div className="text-sm text-gray-500">{appointment.patientId}</div>
+                      <div className="font-medium text-gray-900">{maskPII(appointment.patientName)}</div>
+                      <div className="text-sm text-gray-500">{maskPatientId(appointment.patientId)}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">

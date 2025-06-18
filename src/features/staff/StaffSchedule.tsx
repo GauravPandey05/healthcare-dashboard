@@ -1,14 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { dataService } from '../../services/dataService';
-import { maskPII } from '../../utils/privacyUtils';
-import type { SecureStaffMember } from '../../types/schema';
-
-// Use the actual shifts from our data
-const shifts = ['Day Shift (7 AM - 7 PM)', 'Night Shift (7 PM - 7 AM)', 'Off'];
-
-// Use the actual departments from our data
-const departments = ['Cardiology', 'Orthopedics', 'Emergency Department', 'Internal Medicine'];
+import { maskPII, maskStaffId } from '../../utils/privacyUtils';
+import type { SecureStaffMember, Department, StaffScheduleEntry } from '../../types/schema';
 
 // Define a type for our schedule data structure
 type ScheduleData = {
@@ -19,8 +13,12 @@ type ScheduleData = {
 
 const StaffSchedule: React.FC = () => {
   const [staff, setStaff] = useState<SecureStaffMember[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [shifts, setShifts] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
   const [scheduleData, setScheduleData] = useState<ScheduleData>({});
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [selectedWeek, setSelectedWeek] = useState<string>('current');
@@ -46,13 +44,28 @@ const StaffSchedule: React.FC = () => {
 
   const [weekDates, setWeekDates] = useState(getCurrentWeekDates());
 
+  // Get unique shifts from staff data
+  const getUniqueShifts = (staffData: SecureStaffMember[]): string[] => {
+    const shiftsSet = new Set<string>();
+    staffData.forEach(member => shiftsSet.add(member.shift));
+    shiftsSet.add('Off');
+    shiftsSet.add('On Call');
+    return Array.from(shiftsSet);
+  };
+
   useEffect(() => {
     const fetchStaffData = async () => {
       setIsLoading(true);
       try {
-        // Fetch staff data
-        const staffData = await dataService.getSecureStaff();
+        // Fetch staff and departments in parallel
+        const [staffData, departmentsData] = await Promise.all([
+          dataService.getSecureStaff(),
+          dataService.getDepartments()
+        ]);
+        
         setStaff(staffData);
+        setDepartments(departmentsData);
+        setShifts(getUniqueShifts(staffData));
         
         // Create initial schedule data based on their current shifts
         const initialScheduleData: ScheduleData = {};
@@ -97,6 +110,41 @@ const StaffSchedule: React.FC = () => {
         [date]: shift
       }
     }));
+  };
+
+  // Save schedule to backend
+  const saveSchedule = async () => {
+    setIsSaving(true);
+    setSaveMessage(null);
+    
+    try {
+      // Convert schedule data to the format expected by the backend
+      const scheduleEntries: StaffScheduleEntry[] = [];
+      
+      Object.entries(scheduleData).forEach(([staffId, dates]) => {
+        Object.entries(dates).forEach(([date, shift]) => {
+          scheduleEntries.push({
+            staffId,
+            date,
+            shift
+          });
+        });
+      });
+      
+      // Call the service to save
+      const result = await dataService.saveStaffSchedule(scheduleEntries);
+      
+      if (result.success) {
+        setSaveMessage({ type: 'success', text: 'Schedule saved successfully!' });
+      } else {
+        setSaveMessage({ type: 'error', text: 'Failed to save schedule.' });
+      }
+    } catch (err) {
+      console.error('Error saving schedule:', err);
+      setSaveMessage({ type: 'error', text: 'An error occurred while saving the schedule.' });
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // Navigate to previous week
@@ -203,7 +251,7 @@ const StaffSchedule: React.FC = () => {
           >
             <option value="all">All Departments</option>
             {departments.map(dept => (
-              <option key={dept} value={dept}>{dept}</option>
+              <option key={dept.id} value={dept.name}>{dept.name}</option>
             ))}
           </select>
         </div>
@@ -244,6 +292,7 @@ const StaffSchedule: React.FC = () => {
                       <div className="ml-4">
                         <div className="text-sm font-medium text-gray-900">{maskPII(staffMember.fullName)}</div>
                         <div className="text-xs text-gray-500">{staffMember.role}</div>
+                        <div className="text-xs text-gray-400">ID: {maskStaffId(staffMember.id)}</div>
                       </div>
                     </div>
                   </td>
@@ -267,7 +316,6 @@ const StaffSchedule: React.FC = () => {
                           {shifts.map(shift => (
                             <option key={shift} value={shift}>{shift}</option>
                           ))}
-                          <option value="On Call">On Call</option>
                         </select>
                       </td>
                     );
@@ -286,15 +334,26 @@ const StaffSchedule: React.FC = () => {
         </div>
       </div>
 
-      {/* Save Button */}
+      {/* Save Button and Message */}
       <div className="mt-6 flex justify-end">
         <button
-          className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-          onClick={() => alert('Schedule saved successfully!')}
+          className={`px-6 py-2 ${
+            isSaving ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'
+          } text-white rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2`}
+          onClick={saveSchedule}
+          disabled={isSaving}
         >
-          Save Schedule
+          {isSaving ? 'Saving...' : 'Save Schedule'}
         </button>
       </div>
+      
+      {saveMessage && (
+        <div className={`mt-4 p-3 rounded-md ${
+          saveMessage.type === 'success' ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'
+        }`}>
+          {saveMessage.text}
+        </div>
+      )}
     </PageContainer>
   );
 };

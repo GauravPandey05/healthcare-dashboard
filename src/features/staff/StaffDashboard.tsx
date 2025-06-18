@@ -5,8 +5,8 @@ import { MetricCard } from '../../components/common/MetricCard';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import type { StatusType } from '../../components/common/StatusBadge';
 import { dataService } from '../../services/dataService';
-import { maskPII, maskPatientId } from '../../utils/privacyUtils';
-import type { SecureStaffMember, SecurePatient } from '../../types/schema';
+import { maskPII, maskPatientId, maskStaffId } from '../../utils/privacyUtils';
+import type { SecureStaffMember, SecurePatient, StaffStatus, Department } from '../../types/schema';
 import { MetricCardSkeleton, ChartSkeleton, TableSkeleton } from '../../components/common/Skeleton';
 
 // SVG icons
@@ -34,12 +34,15 @@ const StarIcon = () => (
   </svg>
 );
 
-// Function to map staff status to StatusType
-const mapStatusToStatusType = (status: string): StatusType => {
-  if (status === 'On Duty') return 'Active';
-  if (status === 'On Call') return 'Pending';
-  if (status === 'Off Duty') return 'Inactive';
-  return 'Active'; // Default fallback
+// Function to map staff status to StatusType using StaffStatus type
+const mapStatusToStatusType = (status: StaffStatus): StatusType => {
+  switch(status) {
+    case 'On Duty': return 'Active';
+    case 'On Call': return 'Pending';
+    case 'Off Duty': return 'Inactive';
+    case 'On Leave': return 'Inactive';
+    default: return 'Active'; // Default fallback
+  }
 };
 
 const StaffDashboard: React.FC = () => {
@@ -51,6 +54,7 @@ const StaffDashboard: React.FC = () => {
   const [assignedPatients, setAssignedPatients] = useState<SecurePatient[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [departmentData, setDepartmentData] = useState<Department | null>(null);
 
   useEffect(() => {
     const fetchStaffData = async () => {
@@ -58,35 +62,45 @@ const StaffDashboard: React.FC = () => {
       setError(null);
 
       try {
-        // Fetch staff data
-        const staffData = await dataService.getSecureStaff();
-        setStaff(staffData);
-
-        // Find the selected staff member
-        let staffMember = null;
-        if (staffId) {
-          staffMember = staffData.find(s => s.id === staffId);
-        } else if (staffData.length > 0) {
-          staffMember = staffData[0];
-          // Update URL without refreshing
-          navigate(`/staff/${staffMember.id}`, { replace: true });
+        // If no staffId provided, fetch all staff and redirect to first one
+        if (!staffId) {
+          const staffData = await dataService.getSecureStaff();
+          
+          if (staffData.length > 0) {
+            navigate(`/staff/${staffData[0].id}`, { replace: true });
+            return;
+          } else {
+            throw new Error('No staff members found');
+          }
         }
 
-        if (staffMember) {
-          setSelectedStaff(staffMember);
-
-          // Fetch patients assigned to this staff member
-          // Only get patients for doctors (based on the exact data structure)
-          if (staffMember.role.includes('Doctor') || staffMember.role.includes('Cardiologist') || staffMember.role.includes('Surgeon')) {
-            const allPatients = await dataService.getSecurePatients();
-            // Filter patients assigned to this doctor/specialist
-            const assignedPatients = allPatients.filter(
-              patient => patient.doctor === staffMember.fullName
-            );
-            setAssignedPatients(assignedPatients);
-          }
-        } else {
+        // Use the dedicated method to get a specific staff member
+        const staffMember = await dataService.getSecureStaffById(staffId);
+        
+        if (!staffMember) {
           setError(`Staff member with ID ${staffId} not found.`);
+          return;
+        }
+        
+        setSelectedStaff(staffMember);
+
+        // Get all staff for the dropdown
+        const allStaff = await dataService.getSecureStaff();
+        setStaff(allStaff);
+
+        // Get department data for this staff member's department
+        const allDepartments = await dataService.getDepartments();
+        const staffDepartment = allDepartments.find(
+          dept => dept.name === staffMember.department
+        );
+        setDepartmentData(staffDepartment || null);
+
+        // Use the dedicated method to get patients for this staff member
+        if (staffMember.role.includes('Doctor') || 
+            staffMember.role.includes('Cardiologist') || 
+            staffMember.role.includes('Surgeon')) {
+          const patients = await dataService.getPatientsByStaffId(staffId);
+          setAssignedPatients(patients);
         }
       } catch (err) {
         console.error('Error loading staff details:', err);
@@ -185,19 +199,19 @@ const StaffDashboard: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div>
             <p className="text-sm text-gray-500">Name</p>
-            <p className="text-md font-medium">{maskPII(selectedStaff.fullName)}</p>
+            <p className="text-md font-medium text-black">{maskPII(selectedStaff.fullName)}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">ID</p>
-            <p className="text-md font-medium">{selectedStaff.id}</p>
+            <p className="text-md font-medium text-black">{maskStaffId(selectedStaff.id)}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Role</p>
-            <p className="text-md font-medium">{selectedStaff.role}</p>
+            <p className="text-md font-medium text-black">{selectedStaff.role}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Department</p>
-            <p className="text-md font-medium">{selectedStaff.department}</p>
+            <p className="text-md font-medium text-black">{selectedStaff.department}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Status</p>
@@ -207,15 +221,15 @@ const StaffDashboard: React.FC = () => {
           </div>
           <div>
             <p className="text-sm text-gray-500">Shift</p>
-            <p className="text-md font-medium">{selectedStaff.shift}</p>
+            <p className="text-md font-medium text-black">{selectedStaff.shift}</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Experience</p>
-            <p className="text-md font-medium">{selectedStaff.experience} years</p>
+            <p className="text-md font-medium text-black">{selectedStaff.experience} years</p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Specialty</p>
-            <p className="text-md font-medium">{selectedStaff.specialty}</p>
+            <p className="text-md font-medium text-black">{selectedStaff.specialty}</p>
           </div>
         </div>
       </div>
@@ -252,36 +266,35 @@ const StaffDashboard: React.FC = () => {
       <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
         <h2 className="text-lg font-medium text-gray-800 mb-4">Department Information</h2>
         
-        {/* We'll use the actual data from the departments array */}
-        {(() => {
-          const dept = selectedStaff.department;
-          // Find the department data based on the staff's department
-          const deptData = { patients: '-', staff: '-', satisfaction: '-', avgWaitTime: '-' }; // Default
-
-          return (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="bg-gray-50 p-3 rounded-md">
-                <p className="text-sm font-medium text-gray-700">Total Patients</p>
-                <p className="mt-1 text-xl font-semibold text-gray-900">{deptData.patients}</p>
-              </div>
-              
-              <div className="bg-gray-50 p-3 rounded-md">
-                <p className="text-sm font-medium text-gray-700">Department Staff</p>
-                <p className="mt-1 text-xl font-semibold text-gray-900">{deptData.staff}</p>
-              </div>
-              
-              <div className="bg-gray-50 p-3 rounded-md">
-                <p className="text-sm font-medium text-gray-700">Satisfaction Score</p>
-                <p className="mt-1 text-xl font-semibold text-gray-900">{deptData.satisfaction}</p>
-              </div>
-              
-              <div className="bg-gray-50 p-3 rounded-md">
-                <p className="text-sm font-medium text-gray-700">Average Wait Time</p>
-                <p className="mt-1 text-xl font-semibold text-gray-900">{deptData.avgWaitTime} min</p>
-              </div>
+        {departmentData ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-gray-50 p-3 rounded-md">
+              <p className="text-sm font-medium text-gray-700">Total Patients</p>
+              <p className="mt-1 text-xl font-semibold text-gray-900">{departmentData.totalPatients}</p>
             </div>
-          );
-        })()}
+            
+            <div className="bg-gray-50 p-3 rounded-md">
+              <p className="text-sm font-medium text-gray-700">Department Staff</p>
+              <p className="mt-1 text-xl font-semibold text-gray-900">
+                {departmentData.staff ? 
+                  (departmentData.staff.doctors + departmentData.staff.nurses + departmentData.staff.support) : 
+                  '-'}
+              </p>
+            </div>
+            
+            <div className="bg-gray-50 p-3 rounded-md">
+              <p className="text-sm font-medium text-gray-700">Satisfaction Score</p>
+              <p className="mt-1 text-xl font-semibold text-gray-900">{departmentData.satisfaction}%</p>
+            </div>
+            
+            <div className="bg-gray-50 p-3 rounded-md">
+              <p className="text-sm font-medium text-gray-700">Average Wait Time</p>
+              <p className="mt-1 text-xl font-semibold text-gray-900">{departmentData.avgWaitTime} min</p>
+            </div>
+          </div>
+        ) : (
+          <div className="text-gray-500 p-4 text-center">No department information available</div>
+        )}
       </div>
 
       {/* Assigned Patients */}
@@ -371,7 +384,6 @@ const StaffDashboard: React.FC = () => {
         <div className="grid grid-cols-7 gap-2">
           {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, index) => {
             // Determine if this staff member works on this day
-            // This is a simplified pattern based on the shift name
             const isWorkDay = selectedStaff.status === 'On Duty' && index > 0 && index < 6;
             const shiftLabel = selectedStaff.shift.split(' ')[0];
             

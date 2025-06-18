@@ -2,20 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { PageContainer } from '../../components/layout/PageContainer';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import type { StatusType } from '../../components/common/StatusBadge';
+import type { Appointment, AppointmentData } from '../../types/schema';
 import { dataService } from '../../services/dataService';
-import { maskPII } from '../../utils/privacyUtils';
-import type { AppointmentData } from '../../types/schema';
+import { formatTimeForDisplay } from '../../utils/dateUtils';
 import { TableSkeleton } from '../../components/common/Skeleton';
 import { useNavigate } from 'react-router-dom';
+import { maskPII } from '../../utils/privacyUtils';
 
-interface ScheduledAppointment {
-  id: string;
-  time: string;
-  patientName: string;
-  doctor: string;
-  department: string;
-  type: string;
-  status: string;
+// Create an interface that extends Appointment for the wait time data
+interface EnhancedAppointment extends Appointment {
   waitTime?: number;
 }
 
@@ -23,22 +18,20 @@ const AppointmentSchedule: React.FC = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [scheduledAppointments, setScheduledAppointments] = useState<EnhancedAppointment[]>([]);
   const [appointmentData, setAppointmentData] = useState<AppointmentData | null>(null);
   const [selectedDay, setSelectedDay] = useState<string>('Monday');
-  const [scheduledAppointments, setScheduledAppointments] = useState<ScheduledAppointment[]>([]);
   
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
       try {
+        // Get appointment data for stats
         const data = await dataService.getAppointments();
         setAppointmentData(data);
         
-        // Generate schedule for the selected day
-        const dayData = data.weeklySchedule.find(d => d.day === selectedDay);
-        if (dayData) {
-          setScheduledAppointments(generateDailySchedule(dayData, data));
-        }
+        // Initially select Monday
+        setSelectedDay('Monday');
       } catch (err) {
         console.error('Error fetching appointment data:', err);
         setError('Failed to load appointment data. Please try again later.');
@@ -50,89 +43,47 @@ const AppointmentSchedule: React.FC = () => {
     fetchData();
   }, []);
   
-  // When the selected day changes, generate a new schedule
+  // Add this effect to handle day selection
   useEffect(() => {
-    if (appointmentData) {
-      const dayData = appointmentData.weeklySchedule.find(d => d.day === selectedDay);
-      if (dayData) {
-        setScheduledAppointments(generateDailySchedule(dayData, appointmentData));
-      }
+    if (selectedDay) {
+      processAppointmentsForDay(selectedDay);
     }
-  }, [selectedDay, appointmentData]);
+  }, [selectedDay]);
   
-  // Helper function to generate a daily schedule
-  const generateDailySchedule = (
-    dayData: any, 
-    data: AppointmentData
-  ): ScheduledAppointment[] => {
-    const appointments: ScheduledAppointment[] = [];
-    const typeOptions = data.byType.map(t => t.type);
-    const doctorNames = [
-      "Dr. Smith", "Dr. Johnson", "Dr. Williams", "Dr. Jones", "Dr. Brown", 
-      "Dr. Davis", "Dr. Miller", "Dr. Wilson", "Dr. Moore", "Dr. Taylor"
-    ];
-    const departments = [
-      "Cardiology", "Orthopedics", "Neurology", "Pediatrics", 
-      "Obstetrics", "Psychiatry", "Oncology", "Emergency"
-    ];
-    
-    // Generate appointments based on scheduled count
-    for (let i = 0; i < dayData.scheduled; i++) {
-      // Calculate time slot (8am to 5pm)
-      const hour = Math.floor(i / 4) + 8;  // 4 appointments per hour
-      const minute = (i % 4) * 15;         // 15-minute intervals
-      const formattedHour = hour > 12 ? hour - 12 : hour;
-      const ampm = hour >= 12 ? 'PM' : 'AM';
-      const timeString = `${formattedHour}:${minute.toString().padStart(2, '0')} ${ampm}`;
+  // Process appointments for the selected day - using data from healthcareData
+  const processAppointmentsForDay = async (day: string) => {
+    try {
+      setIsLoading(true);
+      // Get all appointments from dataService
+      const allAppointments = await dataService.getAllAppointments();
       
-      // Determine status based on day data proportions
-      let status = 'Scheduled';
-      if (i < dayData.completed) {
-        status = 'Completed';
-      } else if (i < dayData.completed + dayData.cancelled) {
-        status = 'Cancelled';
-      } else if (dayData.inProgress && i < dayData.completed + dayData.cancelled + dayData.inProgress) {
-        status = 'In Progress';
-      }
+      // Days of the week
+      const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      const selectedDayIndex = daysOfWeek.indexOf(day);
       
-      // Calculate wait time for completed appointments
-      let waitTime;
-      if (status === 'Completed') {
-        // Random variation around the average
-        const variationFactor = 0.8 + (Math.random() * 0.4); // 80% to 120% of average
-        waitTime = Math.round(dayData.waitTime * variationFactor);
-      }
-      
-      appointments.push({
-        id: `APT-${selectedDay}-${i}`,
-        time: timeString,
-        patientName: `Patient ${i+1}`,
-        doctor: doctorNames[Math.floor(Math.random() * doctorNames.length)],
-        department: departments[Math.floor(Math.random() * departments.length)],
-        type: typeOptions[Math.floor(Math.random() * typeOptions.length)],
-        status: status,
-        waitTime: waitTime
+      // Filter appointments for the selected day by checking the date
+      const dayAppointments = allAppointments.filter(apt => {
+        const aptDate = new Date(apt.date);
+        return aptDate.getDay() === selectedDayIndex;
+      }).map(apt => {
+        // Calculate wait time based on the selected day's average from appointmentData
+        const avgWaitTime = appointmentData?.weeklySchedule.find(d => d.day === day)?.waitTime || 0;
+        
+        // Only add waitTime for completed appointments
+        const waitTime = apt.status === 'Completed' ? avgWaitTime : undefined;
+        
+        // Return enhanced appointment with wait time
+        return { ...apt, waitTime } as EnhancedAppointment;
       });
+      
+      setScheduledAppointments(dayAppointments);
+    } catch (err) {
+      console.error('Error processing appointments for day:', err);
+    } finally {
+      setIsLoading(false);
     }
-    
-    // Sort by time
-    return appointments.sort((a, b) => {
-      // Extract hour and minute
-      const [aTime, aAmPm] = a.time.split(' ');
-      const [aHour, aMinute] = aTime.split(':').map(Number);
-      const [bTime, bAmPm] = b.time.split(' ');
-      const [bHour, bMinute] = bTime.split(':').map(Number);
-      
-      // Convert to 24-hour format for comparison
-      const aHour24 = aHour + (aAmPm === 'PM' && aHour !== 12 ? 12 : 0) - (aAmPm === 'AM' && aHour === 12 ? 12 : 0);
-      const bHour24 = bHour + (bAmPm === 'PM' && bHour !== 12 ? 12 : 0) - (bAmPm === 'AM' && bHour === 12 ? 12 : 0);
-      
-      // Compare hours first, then minutes
-      if (aHour24 !== bHour24) return aHour24 - bHour24;
-      return aMinute - bMinute;
-    });
   };
-  
+
   // Helper function to map appointment status to StatusBadge type
   const mapStatusToStatusType = (status: string): StatusType => {
     switch (status) {
@@ -200,25 +151,29 @@ const AppointmentSchedule: React.FC = () => {
       </div>
       
       {/* Day selection tabs */}
-      <div className="mb-6">
-        <div className="flex space-x-1 border-b overflow-x-auto">
+      <div className="border-b border-gray-200 mb-4">
+        <nav className="-mb-px flex space-x-6">
           {appointmentData.weeklySchedule.map(day => (
             <button
               key={day.day}
-              className={`py-2 px-4 text-sm font-medium border-b-2 ${
-                selectedDay === day.day 
-                  ? 'border-blue-500 text-blue-600' 
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-              onClick={() => setSelectedDay(day.day)}
+              type="button" // Add this to prevent form submission
+              onClick={(e) => {
+                e.preventDefault(); // Prevent default browser action
+                e.stopPropagation(); // Stop event bubbling
+                setSelectedDay(day.day);
+              }}
+              className={`
+                whitespace-nowrap py-2 px-4 font-medium text-sm rounded-md transition-colors
+                ${selectedDay === day.day
+                  ? 'bg-blue-50 text-blue-700 border border-blue-200' // Subtle blue for selected tab
+                  : 'text-gray-600 hover:bg-gray-50 border border-transparent'  // Gray with hover effect
+                }
+              `}
             >
               {day.day}
-              <span className="ml-2 bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-0.5 rounded-full">
-                {day.scheduled}
-              </span>
             </button>
           ))}
-        </div>
+        </nav>
       </div>
       
       {/* Day statistics */}
@@ -303,7 +258,7 @@ const AppointmentSchedule: React.FC = () => {
                   }`}
                 >
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    {appointment.time}
+                    {formatTimeForDisplay(appointment.time)}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
@@ -331,7 +286,7 @@ const AppointmentSchedule: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm text-gray-500">
                     {appointment.status === 'Completed' ? 
-                      `${appointment.waitTime} min` : 
+                      `${appointment.waitTime || '-'} min` : 
                       appointment.status === 'In Progress' ?
                       'In progress' :
                       '-'

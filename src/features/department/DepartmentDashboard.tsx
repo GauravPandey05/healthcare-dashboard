@@ -6,8 +6,10 @@ import { BarChart } from '../../components/charts/BarChart';
 import { PieChart } from '../../components/charts/PieChart';
 import { dataService } from '../../services/dataService';
 import { cacheService } from '../../services/cacheService';
-import type 
-{ Department, DepartmentQuality, Quality, Financial, SecurePatient, SecureStaffMember } from '../../types/schema';
+import type { 
+  Department, DepartmentQuality, Quality, Financial, 
+  SecurePatient, SecureStaffMember, EnhancedDepartment 
+} from '../../types/schema';
 import { MetricCardSkeleton, ChartSkeleton, TableSkeleton } from '../../components/common/Skeleton';
 import { maskPII, maskPatientId } from '../../utils/privacyUtils';
 
@@ -53,6 +55,7 @@ export const DepartmentDashboard: React.FC = () => {
   const [patients, setPatients] = useState<SecurePatient[]>([]);
   const [qualityMetrics, setQualityMetrics] = useState<Quality | null>(null);
   const [financialData, setFinancialData] = useState<Financial | null>(null);
+  const [enhancedDepartment, setEnhancedDepartment] = useState<EnhancedDepartment | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -101,17 +104,25 @@ export const DepartmentDashboard: React.FC = () => {
         setSelectedDepartment(department);
         
         // Load department-specific data
-        const [staffData, patientData, qualityData, financialData] = await Promise.all([
+        const [
+          staffData, 
+          patientData, 
+          qualityData, 
+          financialData,
+          enhancedDept
+        ] = await Promise.all([
           dataService.getSecureStaffByDepartment(deptId),
           dataService.getSecurePatientsByDepartment(deptId),
           dataService.getQualityMetrics(),
-          dataService.getFinancialData()
+          dataService.getFinancialData(),
+          dataService.getEnhancedDepartment(deptId)
         ]);
 
         setStaff(staffData);
         setPatients(patientData);
         setQualityMetrics(qualityData);
         setFinancialData(financialData);
+        setEnhancedDepartment(enhancedDept);
       } else {
         setError(`Department with ID ${deptId} not found.`);
       }
@@ -371,23 +382,27 @@ export const DepartmentDashboard: React.FC = () => {
         />
         <MetricCard
           title="Avg. Wait Time"
-          value={`${selectedDepartment.avgWaitTime} min`}
+          value={`${enhancedDepartment?.quality.waitTime?.avgWait || selectedDepartment.avgWaitTime} min`}
           icon={<ClockIcon />}
           trend={{
-            value: waitTimeMetric ? (waitTimeMetric.target || 0) - selectedDepartment.avgWaitTime : 0,
-            isPositive: waitTimeMetric ? selectedDepartment.avgWaitTime <= (waitTimeMetric.target || 60) : true
+            value: enhancedDepartment?.quality.waitTime?.target 
+              ? (enhancedDepartment.quality.waitTime.target - enhancedDepartment.quality.waitTime.avgWait) 
+              : 0,
+            isPositive: enhancedDepartment?.quality.waitTime
+              ? (enhancedDepartment.quality.waitTime.avgWait <= enhancedDepartment.quality.waitTime.target)
+              : true
           }}
-          color={selectedDepartment.avgWaitTime <= 20 ? 'success' : 'warning'}
+          color={(enhancedDepartment?.quality.waitTime?.avgWait || selectedDepartment.avgWaitTime) <= 20 ? 'success' : 'warning'}
         />
         <MetricCard
           title="Patient Satisfaction"
-          value={selectedDepartment.satisfaction.toFixed(1)}
+          value={enhancedDepartment?.quality.satisfaction?.score.toFixed(1) || selectedDepartment.satisfaction.toFixed(1)}
           icon={<StarIcon />}
           trend={{
-            value: Math.round((selectedDepartment.satisfaction / 5) * 100),
-            isPositive: selectedDepartment.satisfaction >= 4.5
+            value: Math.round(((enhancedDepartment?.quality.satisfaction?.score || selectedDepartment.satisfaction) / 5) * 100),
+            isPositive: (enhancedDepartment?.quality.satisfaction?.score || selectedDepartment.satisfaction) >= 4.5
           }}
-          color={selectedDepartment.satisfaction >= 4.5 ? 'success' : 'warning'}
+          color={(enhancedDepartment?.quality.satisfaction?.score || selectedDepartment.satisfaction) >= 4.5 ? 'success' : 'warning'}
         />
       </div>
 
@@ -423,7 +438,29 @@ export const DepartmentDashboard: React.FC = () => {
           </div>
           <div className="mt-4">
             <PieChart 
-              data={getStaffByRole()} 
+              data={[
+                {
+                  name: 'Doctors',
+                  value: selectedDepartment.staff.doctors,
+                  percentage: Math.round((selectedDepartment.staff.doctors / 
+                    (selectedDepartment.staff.doctors + selectedDepartment.staff.nurses + selectedDepartment.staff.support)) * 100),
+                  color: '#3B82F6' // blue
+                },
+                {
+                  name: 'Nurses',
+                  value: selectedDepartment.staff.nurses,
+                  percentage: Math.round((selectedDepartment.staff.nurses / 
+                    (selectedDepartment.staff.doctors + selectedDepartment.staff.nurses + selectedDepartment.staff.support)) * 100),
+                  color: '#10B981' // green
+                },
+                {
+                  name: 'Support',
+                  value: selectedDepartment.staff.support,
+                  percentage: Math.round((selectedDepartment.staff.support / 
+                    (selectedDepartment.staff.doctors + selectedDepartment.staff.nurses + selectedDepartment.staff.support)) * 100),
+                  color: '#8B5CF6' // purple
+                }
+              ]} 
               height={250} 
               innerRadius={0}
               outerRadius={90}
@@ -496,12 +533,18 @@ export const DepartmentDashboard: React.FC = () => {
           <div className="flex flex-col">
             <div className="mb-4">
               <p className="text-sm text-gray-500">Revenue</p>
-              <p className="text-3xl font-bold text-green-600">${selectedDepartment.revenue.toLocaleString()}</p>
+              <p className="text-3xl font-bold text-green-600">
+                ${enhancedDepartment?.financial?.revenue 
+                  ? enhancedDepartment.financial.revenue.toLocaleString() 
+                  : selectedDepartment.revenue.toLocaleString()}
+              </p>
             </div>
-            {departmentFinancial && (
+            {enhancedDepartment?.financial && (
               <div>
                 <p className="text-sm text-gray-500">Contribution to Hospital</p>
-                <p className="text-2xl font-bold text-blue-600">{departmentFinancial.percentage.toFixed(1)}%</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {enhancedDepartment.financial.percentage.toFixed(1)}%
+                </p>
               </div>
             )}
           </div>
@@ -511,69 +554,69 @@ export const DepartmentDashboard: React.FC = () => {
         <div className="bg-white p-4 rounded-lg shadow-sm">
           <h2 className="text-lg font-medium text-gray-800 mb-4">Quality Metrics</h2>
           <div className="space-y-4">
-            {readmissionMetric && (
+            {enhancedDepartment?.quality.readmission && (
               <div>
                 <div className="flex justify-between">
                   <p className="text-sm text-gray-500">Readmission Rate</p>
                   <p className={`text-sm font-medium ${
-                    (readmissionMetric.rate || 0) <= (readmissionMetric.target || 0) 
+                    enhancedDepartment.quality.readmission.rate <= enhancedDepartment.quality.readmission.target 
                       ? 'text-green-600' 
                       : 'text-red-600'
                   }`}>
-                    {(readmissionMetric.rate || 0).toFixed(1)}% vs {(readmissionMetric.target || 0).toFixed(1)}% Target
+                    {enhancedDepartment.quality.readmission.rate.toFixed(1)}% vs {enhancedDepartment.quality.readmission.target.toFixed(1)}% Target
                   </p>
                 </div>
                 <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
                   <div 
                     className={`h-2 rounded-full ${
-                      (readmissionMetric.rate || 0) <= (readmissionMetric.target || 0) 
+                      enhancedDepartment.quality.readmission.rate <= enhancedDepartment.quality.readmission.target 
                         ? 'bg-green-500' 
                         : 'bg-red-500'
                     }`} 
-                    style={{ width: `${Math.min(100, ((readmissionMetric.rate || 0) / Math.max(0.1, (readmissionMetric.target || 0) * 1.5)) * 100)}%` }}
+                    style={{ width: `${Math.min(100, (enhancedDepartment.quality.readmission.rate / Math.max(0.1, enhancedDepartment.quality.readmission.target * 1.5)) * 100)}%` }}
                   ></div>
                 </div>
               </div>
             )}
             
-            {waitTimeMetric && (
+            {enhancedDepartment?.quality.waitTime && (
               <div>
                 <div className="flex justify-between">
                   <p className="text-sm text-gray-500">Wait Time</p>
                   <p className={`text-sm font-medium ${
-                    (waitTimeMetric.avgWait || 0) <= (waitTimeMetric.target || 0) 
+                    enhancedDepartment.quality.waitTime.avgWait <= enhancedDepartment.quality.waitTime.target 
                       ? 'text-green-600' 
                       : 'text-red-600'
                   }`}>
-                    {waitTimeMetric.avgWait} min vs {waitTimeMetric.target} min Target
+                    {enhancedDepartment.quality.waitTime.avgWait} min vs {enhancedDepartment.quality.waitTime.target} min Target
                   </p>
                 </div>
                 <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
                   <div 
                     className={`h-2 rounded-full ${
-                      (waitTimeMetric.avgWait || 0) <= (waitTimeMetric.target || 0) 
+                      enhancedDepartment.quality.waitTime.avgWait <= enhancedDepartment.quality.waitTime.target 
                         ? 'bg-green-500' 
                         : 'bg-red-500'
                     }`} 
-                    style={{ width: `${Math.min(100, ((waitTimeMetric.avgWait || 0) / (waitTimeMetric.target || 30)) * 100)}%` }}
+                    style={{ width: `${Math.min(100, (enhancedDepartment.quality.waitTime.avgWait / enhancedDepartment.quality.waitTime.target) * 100)}%` }}
                   ></div>
                 </div>
               </div>
             )}
             
-            {satisfactionMetric && (
+            {enhancedDepartment?.quality.satisfaction && (
               <div>
                 <div className="flex justify-between">
                   <p className="text-sm text-gray-500">Patient Satisfaction</p>
                   <p className="text-sm font-medium text-blue-600">
-                    {satisfactionMetric.score?.toFixed(1)}/5 ({satisfactionMetric.responses} responses)
+                    {enhancedDepartment.quality.satisfaction.score.toFixed(1)}/5 ({enhancedDepartment.quality.satisfaction.responses} responses)
                   </p>
                 </div>
                 <div className="flex items-center mt-1">
                   {Array.from({ length: 5 }).map((_, index) => (
                     <svg 
                       key={index}
-                      className={`w-4 h-4 ${index < Math.round(satisfactionMetric.score || 0) ? 'text-yellow-400' : 'text-gray-300'}`}
+                      className={`w-4 h-4 ${index < Math.round(enhancedDepartment?.quality.satisfaction?.score ?? 0) ? 'text-yellow-400' : 'text-gray-300'}`}
                       fill="currentColor"
                       viewBox="0 0 20 20"
                     >

@@ -105,3 +105,20 @@ export function maskTextContent(text: string): string {
   
   return text;
 }
+
+/**
+ * Masks a staff ID for privacy (e.g., S001 -> S***1)
+ * @param staffId The staff ID to mask
+ * @returns The masked staff ID
+ */
+export const maskStaffId = (staffId: string): string => {
+  if (!staffId || staffId.length < 3) return staffId;
+  
+  // For staff IDs like "S001", return "S***1"
+  const firstChar = staffId.charAt(0);
+  const lastChar = staffId.charAt(staffId.length - 1);
+  const middleLength = staffId.length - 2;
+  const maskedMiddle = '*'.repeat(middleLength);
+  
+  return `${firstChar}${maskedMiddle}${lastChar}`;
+};
