@@ -8,7 +8,7 @@ import { dataService } from '../../services/dataService';
 import { maskPII, maskPatientId, maskStaffId } from '../../utils/privacyUtils';
 import type { SecureStaffMember, SecurePatient, StaffStatus, Department } from '../../types/schema';
 import { MetricCardSkeleton, ChartSkeleton, TableSkeleton } from '../../components/common/Skeleton';
-
+import { ensureNumber } from '../../utils/dataUtils';
 // SVG icons
 const UserIcon = () => (
   <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
@@ -178,11 +178,13 @@ const StaffDashboard: React.FC = () => {
             {selectedStaff.role}: {maskPII(selectedStaff.fullName)}
           </p>
         </div>
+        {/* Top right staff selector - improved for white background */}
         <div className="mt-3 sm:mt-0">
           <select
             value={selectedStaff.id}
             onChange={handleStaffChange}
-            className="border border-gray-300 rounded-md px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="bg-white border border-gray-200 rounded-lg px-4 py-2 shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-700 transition"
+            style={{ minHeight: 40 }}
           >
             {staff.map(s => (
               <option key={s.id} value={s.id}>
@@ -238,27 +240,29 @@ const StaffDashboard: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <MetricCard
           title="Assigned Patients"
-          value={selectedStaff.patients.toString()}
+          value={(selectedStaff.patients !== undefined && selectedStaff.patients !== null) 
+            ? selectedStaff.patients.toString() 
+            : "0"}
           icon={<UserIcon />}
           color="info"
         />
         <MetricCard
           title="Experience"
-          value={`${selectedStaff.experience} years`}
+          value={`${selectedStaff.experience || 0} years`}
           icon={<ClockIcon />}
           color="success"
         />
         <MetricCard
           title="Current Shift"
-          value={selectedStaff.shift.split(' ')[0]} // Just show Day/Night/Evening
+          value={selectedStaff.shift ? selectedStaff.shift.split(' ')[0] : 'N/A'} // Just show Day/Night/Evening
           icon={<CalendarIcon />}
           color="warning"
         />
         <MetricCard
           title="Rating"
-          value={selectedStaff.rating.toFixed(1)}
+          value={ensureNumber(selectedStaff.rating).toFixed(1)}
           icon={<StarIcon />}
-          color={selectedStaff.rating > 4.5 ? 'success' : 'info'}
+          color={ensureNumber(selectedStaff.rating) > 4.5 ? 'success' : 'info'}
         />
       </div>
 
@@ -305,7 +309,8 @@ const StaffDashboard: React.FC = () => {
             {assignedPatients.length > 0 && (
               <button
                 onClick={() => navigate('/patients')}
-                className="text-sm text-primary-600 hover:text-primary-800"
+                className="text-sm px-3 py-1 rounded bg-white border border-gray-200 shadow-sm text-blue-700 hover:bg-blue-50 hover:text-blue-900 transition"
+                style={{ minHeight: 32 }}
               >
                 View All Patients
               </button>

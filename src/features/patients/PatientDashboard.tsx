@@ -59,129 +59,82 @@ export const PatientDashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
 
+  // Simplified patient fetching in useEffect
   useEffect(() => {
     const fetchPatientData = async () => {
       setIsLoading(true);
       setError(null);
 
       try {
-        // First get all patients with unmasked IDs - but only once
-        const allPatientIds = ["P001", "P002", "P003", "P004", "P005"];
-        const rawPatientsPromises = allPatientIds.map(id => 
-          dataService.getPatientById(id)
-        );
+        // Get the patient by ID
+        const patientData = await dataService.getSecurePatientById(patientId || "");
         
-        // Wait for all patient data to be fetched
-        const rawPatients = (await Promise.all(rawPatientsPromises)).filter(p => p !== null) as Patient[];
+        if (!patientData) {
+          throw new Error(`Patient with ID ${patientId} not found`);
+        }
         
-        // Fetch secure patient data
-        const securePatientData = await dataService.getSecurePatients();
+        // Add the originalId property to create an EnhancedSecurePatient
+        const enhancedPatient: EnhancedSecurePatient = {
+          ...patientData,
+          originalId: patientId || ""  // Store the original ID used for lookup
+        };
         
-        // Create enhanced patients with original IDs
-        const enhancedPatients: EnhancedSecurePatient[] = securePatientData.map(securePatient => {
-          // Find matching raw patient using non-PII fields
-          const rawPatient = rawPatients.find(raw => 
-            raw.age === securePatient.age &&
-            raw.gender === securePatient.gender &&
-            raw.department === securePatient.department &&
-            raw.doctor === securePatient.doctor
-          );
-          
-          return {
-            ...securePatient,
-            originalId: rawPatient ? rawPatient.id : securePatient.id
-          };
-        });
+        // Get all patients for the dropdown menu and enhance them
+        const allPatients = await dataService.getSecurePatients();
+        const enhancedPatients: EnhancedSecurePatient[] = allPatients.map(p => ({
+          ...p,
+          originalId: p.id  // Store the original ID for each patient
+        }));
         
         setPatients(enhancedPatients);
+        setSelectedPatient(enhancedPatient);
         
-        // Find patient by ID (either masked or original)
-        let foundPatient: EnhancedSecurePatient | null = null;
+        // Get vitals and timeline
+        setCurrentVitals(patientData.vitals);
         
-        if (patientId) {
-          // First try direct match (in case patientId is the masked ID)
-          foundPatient = enhancedPatients.find(p => p.id === patientId) || null;
-          
-          // If not found, try matching with originalId
-          if (!foundPatient) {
-            foundPatient = enhancedPatients.find(p => p.originalId === patientId) || null;
-          }
-          
-          // If still not found but patientId looks like an original ID, try to get the patient directly
-          if (!foundPatient && patientId.match(/^P\d+$/)) {
-            const directPatient = await dataService.getPatientById(patientId);
-            if (directPatient) {
-              // Create secure version for this patient
-              const securePatient = {
-                id: maskPatientId(directPatient.id),
-                fullName: maskPII(directPatient.fullName),
-                age: directPatient.age,
-                gender: directPatient.gender,
-                department: directPatient.department,
-                doctor: directPatient.doctor,
-                status: directPatient.status,
-                severity: directPatient.severity,
-                admissionDate: directPatient.admissionDate,
-                lastVisit: directPatient.lastVisit,
-                nextAppointment: directPatient.nextAppointment,
-                room: directPatient.room,
-                diagnosis: directPatient.diagnosis,
-                vitals: directPatient.vitals,
-                allergies: directPatient.allergies,
-                medications: directPatient.medications,
-                originalId: directPatient.id
-              };
-              foundPatient = securePatient as EnhancedSecurePatient;
-              setPatients([...enhancedPatients, foundPatient]);
-            }
-          }
+        // Fetch timeline data using the original ID
+        try {
+          const timelineData = await dataService.getPatientTimeline(patientId || "");
+          console.log('Timeline data fetched:', timelineData); // Add this log
+          setTimelineEvents(timelineData || []); // Ensure it's never null
+        } catch (timelineErr) {
+          console.error('Error loading timeline data:', timelineErr);
+          setTimelineEvents([]);
         }
         
-        // If no patient found, use the first one
-        if (!foundPatient && enhancedPatients.length > 0) {
-          foundPatient = enhancedPatients[0];
-          navigate(`/patients/${foundPatient.originalId}`, { replace: true });
-        }
-        
-        if (foundPatient) {
-          setSelectedPatient(foundPatient);
-          
-          // Only fetch current vitals from selected patient
-          setCurrentVitals(foundPatient.vitals);
-          
-          // Fetch timeline data from service instead of generating it
-          try {
-            const timelineData = await dataService.getPatientTimeline(foundPatient.originalId);
-            setTimelineEvents(timelineData);
-          } catch (timelineErr) {
-            console.error('Error loading timeline data:', timelineErr);
-            // Fallback to empty timeline
-            setTimelineEvents([]);
-          }
-          
-        } else {
-          setError(`Patient with ID ${patientId} not found.`);
-        }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error loading patient details:', err);
-        setError('Failed to load patient details. Please try again later.');
+        setError(err.message || 'Failed to load patient details. Please try again later.');
+        
+        // If we have patients list but specific patient not found, navigate to first one
+        try {
+          const allPatients = await dataService.getSecurePatients();
+          if (allPatients.length > 0) {
+            // Also enhance these patients
+            const enhancedPatients: EnhancedSecurePatient[] = allPatients.map(p => ({
+              ...p,
+              originalId: p.id
+            }));
+            setPatients(enhancedPatients);
+            navigate(`/patients/${allPatients[0].id}`, { replace: true });
+          }
+        } catch (fallbackErr) {
+          console.error('Error loading fallback patients:', fallbackErr);
+        }
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchPatientData();
+    if (patientId) {
+      fetchPatientData();
+    }
   }, [patientId, navigate]);
 
-  // Handle patient change from dropdown
+  // Handle patient change from dropdown (simplified)
   const handlePatientChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedPatientId = e.target.value;
-    // Find the patient with this original ID
-    const patient = patients.find(p => p.originalId === selectedPatientId);
-    
-    if (patient) {
-      navigate(`/patients/${patient.originalId}`);
-    }
+    navigate(`/patients/${selectedPatientId}`);
   };
 
   // Loading state with skeleton UI
@@ -344,12 +297,12 @@ export const PatientDashboard: React.FC = () => {
         />
       </div>
 
-      {/* Patient Vitals Section - Using the component correctly */}
+      {/* Patient Vitals Section */}
       <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
         <h2 className="text-lg font-medium text-gray-800 mb-4">Patient Vitals</h2>
         {selectedPatient && !isLoading ? (
-          // This uses the PatientVitals component correctly
-          <PatientVitals patientId={selectedPatient.originalId} />
+          // Pass the correct ID to PatientVitals component
+          <PatientVitals patientId={patientId || selectedPatient.id} />
         ) : isLoading ? (
           <ChartSkeleton height="300" />
         ) : (
@@ -420,7 +373,24 @@ export const PatientDashboard: React.FC = () => {
 
       {/* Patient Timeline - using the real timeline data */}
       <div className="bg-white p-4 rounded-lg shadow-sm mb-6">
-        <h2 className="text-lg font-medium text-gray-800 mb-4">Patient Timeline</h2>
+        <h2 className="text-lg font-medium text-gray-800 mb-4">
+          Patient Timeline
+          <span className="ml-2 text-sm text-gray-500">
+            ({timelineEvents.length} events)
+          </span>
+        </h2>
+        
+        {/* Add this debug section */}
+        {timelineEvents.length === 0 && (
+          <div className="bg-yellow-50 p-4 mb-4 rounded-md">
+            <p className="text-yellow-700">No timeline events found for this patient.</p>
+            <p className="text-sm mt-1 text-yellow-600">
+              The backend might not be returning any timeline data. Check the getPatientTimeline
+              method in patientController.js.
+            </p>
+          </div>
+        )}
+        
         <PatientTimeline events={timelineEvents} />
       </div>
     </PageContainer>

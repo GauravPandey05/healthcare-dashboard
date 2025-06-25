@@ -40,3 +40,18 @@
 .read-the-docs {
   color: #888;
 }
+
+/* Add this to your App.css or create it if it doesn't exist */
+.api-warning-banner {
+  background-color: #fff3cd;
+  color: #856404;
+  text-align: center;
+  padding: 8px;
+  font-size: 14px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}

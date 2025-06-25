@@ -43,17 +43,32 @@ const AppointmentsDashboard: React.FC = () => {
   // New state for month range selection
   const [monthRangeStart, setMonthRangeStart] = useState<number>(0);
 
+  // Add this function at the top of your component
+  const normalizeAppointmentData = (data: any): AppointmentData => {
+    return {
+      monthlyTrends: data.monthlyTrends || data.monthly || [],
+      weeklySchedule: data.weeklySchedule || data.weekly || [],
+      byType: data.byType || [],
+      upcoming: data.upcoming || [],
+      completed: data.completed || []
+    };
+  };
+
   useEffect(() => {
     const fetchAppointmentsData = async () => {
       setIsLoading(true);
       try {
         // Fetch appointments data
-        const [appointments, overview] = await Promise.all([
+        const [appointmentsRaw, overview] = await Promise.all([
           dataService.getAppointments(),
           dataService.getOverview()
         ]);
-        setAppointmentData(appointments);
+
         setOverviewData(overview);
+        
+        // Normalize the appointment data structure
+        const appointments = normalizeAppointmentData(appointmentsRaw);
+        setAppointmentData(appointments);
         
         // Initialize monthRangeStart to show most recent 6 months
         if (appointments.monthlyTrends.length > 6) {
@@ -86,7 +101,9 @@ const AppointmentsDashboard: React.FC = () => {
 
   // Get the current month range for display
   const getCurrentMonthRange = () => {
-    if (!appointmentData) return "";
+    if (!appointmentData || !appointmentData.monthlyTrends || appointmentData.monthlyTrends.length === 0) {
+      return "No data available";
+    }
     
     const start = monthRangeStart;
     const end = Math.min(monthRangeStart + 5, appointmentData.monthlyTrends.length - 1);
@@ -94,12 +111,14 @@ const AppointmentsDashboard: React.FC = () => {
     if (start <= end && appointmentData.monthlyTrends[start] && appointmentData.monthlyTrends[end]) {
       return `${appointmentData.monthlyTrends[start].month} - ${appointmentData.monthlyTrends[end].month}`;
     }
-    return "";
+    return "No data available";
   };
 
   // Get the current month range data
   const getCurrentMonthRangeData = () => {
-    if (!appointmentData) return [];
+    if (!appointmentData || !appointmentData.monthlyTrends || appointmentData.monthlyTrends.length === 0) {
+      return [];
+    }
     
     return appointmentData.monthlyTrends.slice(
       monthRangeStart, 

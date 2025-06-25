@@ -9,6 +9,7 @@ export interface MetricCardProps {
     value: number;
     isPositive: boolean;
     suffix?: string; // Added suffix property
+    label?:string;
   };
 }
 

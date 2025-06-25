@@ -65,9 +65,18 @@ export interface AppointmentType {
 }
 
 export interface AppointmentData {
+  // Original properties from mock data
   monthlyTrends: MonthlyAppointment[];
   weeklySchedule: DailyAppointment[];
   byType: AppointmentType[];
+  upcoming: Appointment[];
+  completed: Appointment[];
+  
+  // Add compatibility with API data structure
+  // These fields allow the API to use different field names
+  monthly?: MonthlyAppointment[];    // API might use this instead of monthlyTrends
+  weekly?: DailyAppointment[];       // API might use this instead of weeklySchedule
+  // We'll normalize these in the data service
 }
 
 export interface Department {

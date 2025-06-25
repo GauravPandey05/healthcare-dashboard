@@ -6,7 +6,17 @@ interface PatientTimelineProps {
 }
 
 export const PatientTimeline: React.FC<PatientTimelineProps> = ({ events }) => {
-  // Fix: Update id type from number to string as per schema
+  // Handle empty events array
+  if (!events || events.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-500">
+        <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        <p className="mt-2">No timeline events available for this patient</p>
+      </div>
+    );
+  }
   
   // Sort events by date (newest first)
   const sortedEvents = [...events].sort((a, b) => 
@@ -14,7 +24,10 @@ export const PatientTimeline: React.FC<PatientTimelineProps> = ({ events }) => {
   );
 
   const getIconForEventType = (type: string) => {
-    switch (type) {
+    // Convert to lowercase for case-insensitive comparison
+    const normalizedType = type.toLowerCase();
+    
+    switch (normalizedType) {
       case 'admission':
         return (
           <div className="flex items-center justify-center h-8 w-8 rounded-full bg-blue-100 text-blue-600">
@@ -40,6 +53,7 @@ export const PatientTimeline: React.FC<PatientTimelineProps> = ({ events }) => {
           </div>
         );
       case 'test':
+      case 'lab test': // Add common variations
         return (
           <div className="flex items-center justify-center h-8 w-8 rounded-full bg-yellow-100 text-yellow-600">
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -48,6 +62,7 @@ export const PatientTimeline: React.FC<PatientTimelineProps> = ({ events }) => {
           </div>
         );
       case 'surgery':
+      case 'procedure':
         return (
           <div className="flex items-center justify-center h-8 w-8 rounded-full bg-red-100 text-red-600">
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -56,6 +71,7 @@ export const PatientTimeline: React.FC<PatientTimelineProps> = ({ events }) => {
           </div>
         );
       case 'visit':
+      case 'appointment':
         return (
           <div className="flex items-center justify-center h-8 w-8 rounded-full bg-indigo-100 text-indigo-600">
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -78,9 +94,9 @@ export const PatientTimeline: React.FC<PatientTimelineProps> = ({ events }) => {
     <div className="flow-root">
       <ul className="-mb-8">
         {sortedEvents.map((event, eventIdx) => (
-          <li key={event.id}>
+          <li key={event.id || eventIdx}>  {/* Use index as fallback key */}
             <div className="relative pb-8">
-              {eventIdx !== events.length - 1 ? (
+              {eventIdx !== sortedEvents.length - 1 ? (
                 <span
                   className="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200"
                   aria-hidden="true"
